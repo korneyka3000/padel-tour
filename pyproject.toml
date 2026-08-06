@@ -1,0 +1,54 @@
+[project]
+name = "padel-tour"
+version = "0.1.0"
+description = "Padel tournament engine — Americano and Mexicano formats"
+readme = "README.md"
+requires-python = ">=3.14"
+# The engine is a pure library and stays dependency-free. Anything a consumer needs — CLI,
+# API, bot — lives in an optional group so importing the engine never drags it in.
+dependencies = []
+
+[project.optional-dependencies]
+cli = [
+    "typer>=0.15",
+]
+
+[project.scripts]
+padel-tour = "padel_tour.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/padel_tour"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "hypothesis>=6.112",
+    "ruff>=0.16",
+    "ty>=0.0.65",
+    "prek>=0.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+# Error messages are Russian and docstrings use real maths notation (−, ×, ∪), so the
+# ambiguous-unicode checks only ever fire on intentional characters.
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ty.src]
+include = ["src", "tests"]
+
+[tool.ty.rules]
+# The engine is fully annotated; keep it that way.
+possibly-unresolved-reference = "error"
