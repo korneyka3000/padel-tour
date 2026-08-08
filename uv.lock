@@ -577,25 +577,15 @@ wheels = [
 name = "padel-tour"
 version = "0.1.0"
 source = { editable = "." }
-
-[package.optional-dependencies]
-api = [
-    { name = "fastapi" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-bot = [
+dependencies = [
     { name = "aiogram" },
-    { name = "python-dotenv" },
-    { name = "typer" },
-]
-cli = [
-    { name = "typer" },
-]
-db = [
     { name = "aiosqlite" },
     { name = "alembic" },
     { name = "asyncpg" },
+    { name = "fastapi" },
+    { name = "python-dotenv" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "typer" },
 ]
 
 [package.dev-dependencies]
@@ -607,22 +597,20 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "ruff" },
     { name = "ty" },
+    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "aiogram", marker = "extra == 'bot'", specifier = ">=3.15" },
-    { name = "aiosqlite", marker = "extra == 'db'", specifier = ">=0.20" },
-    { name = "alembic", marker = "extra == 'db'", specifier = ">=1.14" },
-    { name = "asyncpg", marker = "extra == 'db'", specifier = ">=0.30" },
-    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
-    { name = "python-dotenv", marker = "extra == 'bot'", specifier = ">=1.0" },
-    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'db'", specifier = ">=2.0.36" },
-    { name = "typer", marker = "extra == 'bot'", specifier = ">=0.15" },
-    { name = "typer", marker = "extra == 'cli'", specifier = ">=0.15" },
-    { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.34" },
+    { name = "aiogram", specifier = ">=3.15" },
+    { name = "aiosqlite", specifier = ">=0.20" },
+    { name = "alembic", specifier = ">=1.14" },
+    { name = "asyncpg", specifier = ">=0.30" },
+    { name = "fastapi", specifier = ">=0.141" },
+    { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.36" },
+    { name = "typer", specifier = ">=0.15" },
 ]
-provides-extras = ["cli", "db", "bot", "api"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -633,6 +621,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "ruff", specifier = ">=0.16" },
     { name = "ty", specifier = ">=0.0.65" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
 ]
 
 [[package]]

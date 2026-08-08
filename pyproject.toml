@@ -4,30 +4,27 @@ version = "0.1.0"
 description = "Padel tournament engine — Americano and Mexicano formats"
 readme = "README.md"
 requires-python = ">=3.14"
-# The engine is a pure library and stays dependency-free. Anything a consumer needs — CLI,
-# API, bot — lives in an optional group so importing the engine never drags it in.
-dependencies = []
-
-[project.optional-dependencies]
-cli = [
-    "typer>=0.15",
-]
-db = [
+# Everything the application needs to run. These previously sat in extras so the engine
+# could be installed bare — a benefit nobody used, since this is an application and not a
+# library. It cost real friction: Vercel installs with `uv sync`, which takes base
+# dependencies and ignores extras, so the deployed function arrived with none of them.
+#
+# What the extras were really protecting is that `import padel_tour.engine` pulls in nothing
+# but the standard library. That is a property of the import graph rather than of packaging,
+# and tests/test_layering.py checks it directly.
+dependencies = [
+    "aiogram>=3.15",
     "aiosqlite>=0.20",
     "alembic>=1.14",
     "asyncpg>=0.30",
-    "sqlalchemy[asyncio]>=2.0.36",
-]
-bot = [
-    "aiogram>=3.15",
+    "fastapi>=0.141",
     "python-dotenv>=1.0",
-    # padel-tour-bot is a typer command; the webhook path never imports it.
+    "sqlalchemy[asyncio]>=2.0.36",
     "typer>=0.15",
 ]
-api = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.34",
-]
+
+# No `[tool.vercel] entrypoint` here: it resolves a file path from the project root, which a
+# src/ layout does not satisfy. api/index.py is the conventional location instead.
 
 [project.scripts]
 padel-tour = "padel_tour.cli:app"
@@ -43,6 +40,8 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    # Vercel serves the app itself; this is only for running it locally.
+    "uvicorn[standard]>=0.34",
     "pytest>=8.3",
     "hypothesis>=6.112",
     "ruff>=0.16",
