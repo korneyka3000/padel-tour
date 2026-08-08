@@ -6,8 +6,17 @@ a user is allowed to do — that is the service layer's job.
 
 from .config import DEFAULT_SQLITE_PATH, database_url, is_sqlite, normalise_url
 from .models import (
+    EXTERNAL_ID_LENGTH,
+    PROVIDER_EMAIL,
+    PROVIDER_TELEGRAM,
+    Account,
     Base,
     Group,
+    GroupLink,
+    Identity,
+    Invite,
+    LoginSession,
+    MagicLink,
     Match,
     Player,
     Round,
@@ -27,8 +36,17 @@ from .session import (
 
 __all__ = [
     "DEFAULT_SQLITE_PATH",
+    "EXTERNAL_ID_LENGTH",
+    "PROVIDER_EMAIL",
+    "PROVIDER_TELEGRAM",
+    "Account",
     "Base",
     "Group",
+    "GroupLink",
+    "Identity",
+    "Invite",
+    "LoginSession",
+    "MagicLink",
     "Match",
     "Player",
     "Round",

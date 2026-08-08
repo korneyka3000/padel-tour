@@ -24,6 +24,7 @@ from sqlalchemy import (
     String,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -35,6 +36,15 @@ from padel_tour.engine import Format, PairingPattern
 #: Longest name we accept for a group or player. Generous for real names, short enough that
 #: a Telegram keyboard row stays readable.
 NAME_LENGTH = 100
+
+#: Longest external identifier we store. An email address is the long case.
+EXTERNAL_ID_LENGTH = 320
+
+#: How someone signs in, or how a group is reached from outside. Our `Account` is the
+#: identity; these are only ways of arriving at it, which is what keeps a second
+#: integration from reshaping the domain.
+PROVIDER_EMAIL = "email"
+PROVIDER_TELEGRAM = "telegram"
 
 
 def new_id() -> uuid.UUID:
@@ -88,6 +98,116 @@ class TournamentStatus:
     FINISHED = "finished"
 
 
+class Account(Base):
+    """A person, as our system knows them.
+
+    Deliberately almost empty. Everything about *how* they sign in lives in `identities`,
+    so adding a provider never touches this table or anything that references it.
+    """
+
+    __tablename__ = "accounts"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_id)
+    display_name: Mapped[str | None] = mapped_column(String(NAME_LENGTH), default=None)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
+
+    identities: Mapped[list[Identity]] = relationship(
+        back_populates="account", cascade="all, delete-orphan"
+    )
+
+
+class Identity(Base):
+    """One way of signing in to an account: an email address, a Telegram user, later more."""
+
+    __tablename__ = "identities"
+    __table_args__ = (
+        # One external login leads to one account, or the same Telegram user could sign in
+        # as two different people.
+        Index("uq_identity_external", "provider", "external_id", unique=True),
+        # And one account has at most one login per provider.
+        Index("uq_identity_provider", "account_id", "provider", unique=True),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_id)
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"))
+    provider: Mapped[str] = mapped_column(String(20))
+    external_id: Mapped[str] = mapped_column(String(EXTERNAL_ID_LENGTH))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
+
+    account: Mapped[Account] = relationship(back_populates="identities")
+
+
+class LoginSession(Base):
+    """An active sign-in.
+
+    Named for the table rather than for `Session`, which every module here already means
+    as a database session. Kept server-side rather than as a signed token so that signing
+    out of every device is possible.
+    """
+
+    __tablename__ = "sessions"
+    __table_args__ = (Index("uq_session_token", "token_hash", unique=True),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_id)
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"))
+    #: Only ever the hash. A leaked database does not let anyone sign in.
+    token_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
+
+
+class MagicLink(Base):
+    """A single-use sign-in link sent to an email address."""
+
+    __tablename__ = "magic_links"
+    __table_args__ = (Index("uq_magic_token", "token_hash", unique=True),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_id)
+    email: Mapped[str] = mapped_column(String(EXTERNAL_ID_LENGTH))
+    token_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    used_at: Mapped[datetime | None] = mapped_column(UtcDateTime, default=None)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
+
+
+class Invite(Base):
+    """An invitation to become one specific player.
+
+    Issued against a player rather than a group, which is what makes claiming someone
+    else's history impossible.
+    """
+
+    __tablename__ = "invites"
+    __table_args__ = (Index("uq_invite_token", "token_hash", unique=True),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_id)
+    player_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("players.id", ondelete="CASCADE"))
+    created_by_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL"), default=None
+    )
+    token_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    used_at: Mapped[datetime | None] = mapped_column(UtcDateTime, default=None)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
+
+
+class GroupLink(Base):
+    """Where a group is reachable from outside — a Telegram chat, later something else."""
+
+    __tablename__ = "group_links"
+    __table_args__ = (
+        Index("uq_group_link_external", "provider", "external_id", unique=True),
+        Index("uq_group_link_provider", "group_id", "provider", unique=True),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_id)
+    group_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"))
+    provider: Mapped[str] = mapped_column(String(20))
+    external_id: Mapped[str] = mapped_column(String(EXTERNAL_ID_LENGTH))
+
+    group: Mapped[Group] = relationship(back_populates="links")
+
+
 class Group(Base):
     """A padel community: a chat, a club, a regular Tuesday crowd."""
 
@@ -96,10 +216,18 @@ class Group(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_id)
     name: Mapped[str] = mapped_column(String(NAME_LENGTH), unique=True)
     #: Set once the bot is added to a chat; until then the group is CLI-only.
+    #: Superseded by `links`; removed once the accounts migration has moved the data.
     telegram_chat_id: Mapped[int | None] = mapped_column(unique=True, default=None)
+    #: Who runs the roster and hands out invitations.
+    owner_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL"), default=None
+    )
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
 
     players: Mapped[list[Player]] = relationship(
+        back_populates="group", cascade="all, delete-orphan"
+    )
+    links: Mapped[list[GroupLink]] = relationship(
         back_populates="group", cascade="all, delete-orphan"
     )
     tournaments: Mapped[list[Tournament]] = relationship(
@@ -115,11 +243,28 @@ class Player(Base):
     """
 
     __tablename__ = "players"
-    __table_args__ = (Index("uq_players_group_name", "group_id", "name", unique=True),)
+    __table_args__ = (
+        Index("uq_players_group_name", "group_id", "name", unique=True),
+        # One person is one player per group. Unclaimed players are the normal case, and
+        # a partial index lets any number of them coexist.
+        Index(
+            "uq_players_group_account",
+            "group_id",
+            "account_id",
+            unique=True,
+            sqlite_where=text("account_id IS NOT NULL"),
+            postgresql_where=text("account_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_id)
     group_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(NAME_LENGTH))
+    #: A player exists without one; signing up is never a condition of playing. Deleting
+    #: an account leaves the player and their history in place.
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL"), default=None
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
 
@@ -149,9 +294,14 @@ class Tournament(Base):
     #: is what lets a restarted bot pick up the same screen instead of posting a new one.
     screen_chat_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
     screen_message_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
-    #: Telegram id of whoever started this. Scoring stays open to everyone in the chat;
-    #: ending or redrawing takes the game away from the others, so it stays with them.
+    #: Telegram id of whoever started this. Superseded by `organiser_account_id`; removed
+    #: once the accounts migration has moved the data.
     organiser_telegram_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    #: Who runs this tournament. Per tournament, not per group: last week it was one
+    #: person, this week another.
+    organiser_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL"), default=None
+    )
 
     group: Mapped[Group] = relationship(back_populates="tournaments")
     entries: Mapped[list[TournamentPlayer]] = relationship(
