@@ -1,5 +1,7 @@
 # Padel Tour
 
+**Сайт:** https://yo-padel-tour.vercel.app · **Бот:** [@YoPadelTourBot](https://t.me/YoPadelTourBot)
+
 Генерация падел-турниров и статистика по ним: Americano и Mexicano, таблица, график
 «матч за матчем».
 

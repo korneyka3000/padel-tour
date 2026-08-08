@@ -586,6 +586,7 @@ api = [
 bot = [
     { name = "aiogram" },
     { name = "python-dotenv" },
+    { name = "typer" },
 ]
 cli = [
     { name = "typer" },
@@ -617,6 +618,7 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
     { name = "python-dotenv", marker = "extra == 'bot'", specifier = ">=1.0" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'db'", specifier = ">=2.0.36" },
+    { name = "typer", marker = "extra == 'bot'", specifier = ">=0.15" },
     { name = "typer", marker = "extra == 'cli'", specifier = ">=0.15" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.34" },
 ]

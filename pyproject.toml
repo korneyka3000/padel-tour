@@ -21,6 +21,8 @@ db = [
 bot = [
     "aiogram>=3.15",
     "python-dotenv>=1.0",
+    # padel-tour-bot is a typer command; the webhook path never imports it.
+    "typer>=0.15",
 ]
 api = [
     "fastapi>=0.115",
