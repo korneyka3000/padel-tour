@@ -7,16 +7,34 @@ reshapes the domain, and this module never learns the name of one.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
-from padel_tour.db import Account, Identity
+from padel_tour.db import PROVIDER_EMAIL, Account, Identity, LoginSession, MagicLink, utc_now
+
+from .errors import InvalidTokenError, TokenExpiredError, TooManyRequestsError
+from .tokens import hash_token, issue
 
 if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from .mail import Mailer
+
+#: Long enough to walk to your inbox, short enough that a forwarded email is not a key.
+MAGIC_LINK_TTL = timedelta(minutes=15)
+
+#: A padel group plays weekly; signing in every week would be its own kind of friction.
+SESSION_TTL = timedelta(days=30)
+
+#: One link per address per minute. The address is unverified by definition, so without
+#: this the form is a way to fill a stranger's inbox.
+MAGIC_LINK_COOLDOWN = timedelta(seconds=60)
+
+SIGN_IN_SUBJECT = "Вход в Padel Tour"
 
 
 async def get_account(session: AsyncSession, account_id: uuid.UUID) -> Account | None:
@@ -60,4 +78,97 @@ async def attach_identity(
 ) -> None:
     """Add another way of signing in to an account that already exists."""
     session.add(Identity(account_id=account.id, provider=provider, external_id=external_id))
+    await session.flush()
+
+
+# ----------------------------------------------------------------- signing in by email
+
+
+def _sign_in_body(link: str) -> str:
+    return (
+        "Чтобы войти, откройте ссылку:\n\n"
+        f"{link}\n\n"
+        "Она сработает один раз и действует 15 минут.\n"
+        "Если вход запрашивали не вы — просто не открывайте её."
+    )
+
+
+async def request_magic_link(
+    session: AsyncSession, email: str, *, mailer: Mailer, link_base: str
+) -> None:
+    """Send a sign-in link.
+
+    Says nothing about whether the address is known: the caller answers the same either
+    way, or the form becomes a way to check who has an account here.
+    """
+    address = email.strip().lower()
+
+    recent = await session.scalar(
+        select(MagicLink)
+        .where(MagicLink.email == address, MagicLink.created_at > utc_now() - MAGIC_LINK_COOLDOWN)
+        .limit(1)
+    )
+    if recent is not None:
+        raise TooManyRequestsError("Письмо уже отправлено — проверьте почту")
+
+    raw, hashed = issue()
+    session.add(MagicLink(email=address, token_hash=hashed, expires_at=utc_now() + MAGIC_LINK_TTL))
+    await session.flush()
+
+    await mailer.send(address, SIGN_IN_SUBJECT, _sign_in_body(f"{link_base}?token={raw}"))
+
+
+async def redeem_magic_link(session: AsyncSession, raw_token: str) -> Account:
+    """Turn a link into an account, creating one on first sign-in."""
+    link = await session.scalar(
+        select(MagicLink).where(MagicLink.token_hash == hash_token(raw_token))
+    )
+    if link is None or link.used_at is not None:
+        raise InvalidTokenError("Ссылка недействительна — запросите новую")
+    if link.expires_at <= utc_now():
+        raise TokenExpiredError("Ссылка устарела — запросите новую")
+
+    link.used_at = utc_now()
+    await session.flush()
+    return await ensure_identity(session, PROVIDER_EMAIL, link.email)
+
+
+# ----------------------------------------------------------------------------- sessions
+
+
+async def open_session(session: AsyncSession, account: Account) -> str:
+    """Start a signed-in session and return the token for the cookie."""
+    raw, hashed = issue()
+    session.add(
+        LoginSession(account_id=account.id, token_hash=hashed, expires_at=utc_now() + SESSION_TTL)
+    )
+    await session.flush()
+    return raw
+
+
+async def account_for_session(session: AsyncSession, raw_token: str) -> Account | None:
+    """Who is signed in, if anyone. An expired session is nobody."""
+    row = await session.scalar(
+        select(LoginSession).where(LoginSession.token_hash == hash_token(raw_token))
+    )
+    if row is None or row.expires_at <= utc_now():
+        return None
+    return await session.get(Account, row.account_id)
+
+
+async def close_session(session: AsyncSession, raw_token: str) -> None:
+    """Sign out. Unknown tokens are not an error — the outcome is the one asked for."""
+    row = await session.scalar(
+        select(LoginSession).where(LoginSession.token_hash == hash_token(raw_token))
+    )
+    if row is not None:
+        await session.delete(row)
+        await session.flush()
+
+
+async def close_all_sessions(session: AsyncSession, account: Account) -> None:
+    """Sign out everywhere. The reason sessions are rows rather than signed tokens."""
+    rows = await session.scalars(select(LoginSession).where(LoginSession.account_id == account.id))
+    for row in rows:
+        await session.delete(row)
     await session.flush()

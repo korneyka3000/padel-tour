@@ -54,3 +54,43 @@ class ActiveTournamentExistsError(ConflictError):
     A group runs one tournament at a time: the bot shows a single screen per chat, and a
     second live tournament would make that screen ambiguous.
     """
+
+
+class AuthError(ServiceError):
+    """Something went wrong signing in."""
+
+
+class InvalidTokenError(AuthError):
+    """No such token, or it has already been used."""
+
+
+class TokenExpiredError(AuthError):
+    """The token was real but is past its time."""
+
+
+class TooManyRequestsError(ServiceError):
+    """Asked again too soon.
+
+    Sign-in links are sent to an address nobody has proved they own, so without this the
+    form is a way to fill a stranger's inbox.
+    """
+
+
+class ForbiddenError(ServiceError):
+    """Signed in, but not allowed to do this."""
+
+
+class InviteNotFoundError(NotFoundError):
+    """No such invitation, or it has expired."""
+
+
+class InviteUsedError(ConflictError):
+    """That invitation has already been accepted."""
+
+
+class PlayerAlreadyClaimedError(ConflictError):
+    """Someone else already holds this player."""
+
+
+class AlreadyPlayingHereError(ConflictError):
+    """This account is already a different player in the same group."""
