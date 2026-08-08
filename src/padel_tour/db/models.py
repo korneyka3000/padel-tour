@@ -14,6 +14,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -137,7 +138,9 @@ class Tournament(Base):
     pairing_pattern: Mapped[PairingPattern] = mapped_column(String(20))
     total_rounds: Mapped[int] = mapped_column(Integer)
     #: Drives every random choice the engine makes, so a tournament is reproducible.
-    seed: Mapped[int] = mapped_column()
+    #: BigInteger, not Integer: seeds are unsigned 32-bit and Postgres INTEGER is signed,
+    #: so anything above 2**31 is rejected there while SQLite accepts it happily.
+    seed: Mapped[int] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(String(20), default=TournamentStatus.ACTIVE)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, default=None)

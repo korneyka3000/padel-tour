@@ -1,8 +1,8 @@
 """Create tournament schema
 
-Revision ID: c009fd144458
+Revision ID: 436f6478333c
 Revises:
-Create Date: 2026-08-08 14:21:40.740874
+Create Date: 2026-08-08 14:31:00.040948
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from alembic import op
 # importable from every migration.
 import padel_tour.db.models
 
-revision: str = "c009fd144458"
+revision: str = "436f6478333c"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -65,7 +65,7 @@ def upgrade() -> None:
         sa.Column("points_per_match", sa.Integer(), nullable=False),
         sa.Column("pairing_pattern", sa.String(length=20), nullable=False),
         sa.Column("total_rounds", sa.Integer(), nullable=False),
-        sa.Column("seed", sa.Integer(), nullable=False),
+        sa.Column("seed", sa.BigInteger(), nullable=False),
         sa.Column("status", sa.String(length=20), nullable=False),
         sa.Column(
             "created_at",

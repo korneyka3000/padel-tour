@@ -35,6 +35,16 @@
 Локально то же самое ловит `prek` на коммите — до CI доезжает только то, что уже прошло
 проверку.
 
+Если работа трогает базу, перед пушем стоит прогнать набор ещё и на настоящем Postgres,
+а не только на SQLite ([Р-013](DECISIONS.md)):
+
+```bash
+docker run -d --name padel-pg -e POSTGRES_USER=padel -e POSTGRES_PASSWORD=padel \
+  -e POSTGRES_DB=padel_test -p 55432:5432 postgres:18-alpine
+TEST_DATABASE_URL='postgresql://padel:padel@localhost:55432/padel_test' uv run pytest
+docker rm -f padel-pg
+```
+
 ## Что нужно от тебя и когда
 
 Инфраструктура нужна не вся сразу. Список того, что понадобится, и **к какой вехе** —

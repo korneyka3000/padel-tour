@@ -160,12 +160,23 @@ def _to_summary(row: Tournament) -> TournamentSummary:
 
 
 async def _refreshed_view(session: AsyncSession, row: Tournament) -> TournamentView:
-    """Flush pending changes, then build a view from what is now stored."""
+    """Flush pending changes, then build a view from what is now stored.
+
+    The tournament is re-selected with its eager-load options rather than refreshed field by
+    field. Rows created during this call — a new Mexicano round, or the entries a reroll
+    rebuilt — have nothing loaded behind them, and reaching through to a player's name would
+    then attempt lazy IO, which an async session cannot do.
+    """
     await session.flush()
-    await session.refresh(row, ["rounds"])
-    for round_row in row.rounds:
-        await session.refresh(round_row, ["matches"])
-    return _to_view(row, load_state(row))
+    refreshed = await session.scalar(
+        select(Tournament)
+        .where(Tournament.id == row.id)
+        .options(*_loaded())
+        .execution_options(populate_existing=True)
+    )
+    if refreshed is None:  # pragma: no cover - it was just flushed
+        raise TournamentNotFoundError(f"tournament {row.id} vanished mid-update")
+    return _to_view(refreshed, load_state(refreshed))
 
 
 async def _validate_roster(
