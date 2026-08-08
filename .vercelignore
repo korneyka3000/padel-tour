@@ -1,0 +1,8 @@
+.venv
+tests
+docs
+migrations
+padel.db
+.ruff_cache
+.mypy_cache
+.pytest_cache

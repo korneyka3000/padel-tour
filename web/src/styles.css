@@ -1,0 +1,654 @@
+/* A floodlit padel court at nine in the evening.
+ *
+ * Every colour here is taken from the physical thing: the deep blue-teal of the playing
+ * surface, the cool white of the lines, the pale green cast of the glass walls, and one
+ * warm note from a club sign. The page is the court surface, not a dark theme with an
+ * accent on it — that difference is the whole visual idea.
+ *
+ * Committed to a single dark look on purpose. Padel is played in the evening and read
+ * about on a phone straight afterwards.
+ */
+
+:root {
+  --night: #071a1f;
+  --court: #0e4c5c;
+  --court-lit: #12667a;
+  --line: #e8f4f2;
+  --glass: #7fd4c8;
+  --sign: #ffb454;
+
+  --ink: var(--line);
+  --ink-dim: color-mix(in oklab, var(--line) 62%, var(--court));
+  --ink-faint: color-mix(in oklab, var(--line) 34%, var(--court));
+
+  --edge: color-mix(in oklab, var(--glass) 22%, transparent);
+  --edge-strong: color-mix(in oklab, var(--glass) 42%, transparent);
+
+  --display: 'Unbounded', system-ui, sans-serif;
+  --body: 'Golos Text', system-ui, -apple-system, sans-serif;
+
+  --gap: clamp(1rem, 4vw, 1.75rem);
+  --rail: clamp(1rem, 5vw, 2rem);
+  --measure: 44rem;
+
+  --radius: 3px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background:
+    radial-gradient(
+      120% 70% at 50% -10%,
+      color-mix(in oklab, var(--court-lit) 55%, transparent) 0%,
+      transparent 62%
+    ),
+    var(--night);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p,
+figure,
+ul,
+ol {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:focus-visible {
+  outline: 2px solid var(--glass);
+  outline-offset: 3px;
+  border-radius: var(--radius);
+}
+
+/* ─────────────────────────────────────────────────────────── shell */
+
+.shell {
+  max-width: var(--measure);
+  margin-inline: auto;
+  padding: clamp(1.5rem, 6vw, 3rem) var(--rail) 5rem;
+}
+
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.title {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(1.6rem, 7vw, 2.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  margin-block: 0.35rem 0.2rem;
+}
+
+.subtitle {
+  color: var(--ink-dim);
+  font-size: 0.95rem;
+}
+
+.section {
+  margin-top: clamp(2.25rem, 8vw, 3.5rem);
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.6rem;
+  margin-bottom: var(--gap);
+  border-bottom: 1px solid var(--edge);
+}
+
+.section-head h2 {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+/* ─────────────────────────────────────────── the round, as actual courts */
+
+.round-meta {
+  display: flex;
+  align-items: last baseline;
+  gap: 0.7rem;
+  margin-bottom: var(--gap);
+  font-weight: inherit;
+}
+
+.round-number {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(2.75rem, 15vw, 4.25rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.round-of {
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.courts {
+  display: grid;
+  gap: var(--gap);
+}
+
+/* Twenty metres by ten, seen from the side with the net vertical. The glass box is the one
+   shape nobody mistakes for another sport. */
+.court {
+  position: relative;
+  aspect-ratio: 2 / 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: linear-gradient(180deg, var(--court) 0%, var(--court-lit) 55%, var(--court) 100%);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* The floodlight pool: brightest over the net, falling away towards the back glass. */
+.court::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    70% 100% at 50% 50%,
+    color-mix(in oklab, var(--line) 13%, transparent) 0%,
+    transparent 72%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.court-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--line);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.court.is-live {
+  border-color: color-mix(in oklab, var(--sign) 50%, transparent);
+}
+
+.side {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  padding: 1.5rem clamp(0.7rem, 3.5vw, 1.1rem) 0.6rem;
+}
+
+.side-start {
+  justify-content: flex-start;
+}
+
+.side-end {
+  justify-content: flex-end;
+  flex-direction: row-reverse;
+}
+
+/* One player per service box, so the centre line separates them instead of striking
+   through their names. */
+.side-players {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.side-end .side-players {
+  text-align: right;
+}
+
+.player {
+  font-weight: 600;
+  font-size: clamp(0.9rem, 3.4vw, 1.05rem);
+  line-height: 1.28;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Each pair's score sits on its own half, so there is nothing to work out. */
+.side-score {
+  align-self: center;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(1.5rem, 7vw, 2.1rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--line);
+}
+
+.court-tag {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.7rem;
+  z-index: 4;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.court-live {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.7rem;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sign);
+}
+
+.court-live::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sign);
+  animation: pulse 2.4s var(--ease) infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────── standings */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.table th {
+  text-align: right;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-bottom: 0.5rem;
+}
+
+.table th:nth-child(-n + 2),
+.table td:nth-child(-n + 2) {
+  text-align: left;
+}
+
+.table th + th,
+.table td + td {
+  padding-left: 0.9rem;
+}
+
+.table td {
+  text-align: right;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--edge);
+}
+
+.table tbody tr:first-child td {
+  border-top: none;
+}
+
+.rank {
+  width: 2ch;
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+
+.rank.is-podium {
+  color: var(--glass);
+}
+
+.name {
+  font-weight: 500;
+  padding-right: 0.75rem;
+}
+
+.points {
+  font-weight: 700;
+}
+
+.diff {
+  color: var(--ink-faint);
+  width: 5ch;
+}
+
+/* ─────────────────────────────────────────── the climb */
+
+.climb {
+  display: block;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.climb-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: opacity 0.18s var(--ease);
+}
+
+.climb-dot {
+  transition: opacity 0.18s var(--ease);
+}
+
+.climb-row.is-dimmed {
+  opacity: 0.18;
+}
+
+.climb-label {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--ink-dim);
+  transition: fill 0.18s var(--ease);
+}
+
+.climb-row.is-dimmed .climb-label {
+  fill: var(--ink-faint);
+}
+
+.climb-axis {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  fill: var(--ink-faint);
+}
+
+.climb-grid {
+  stroke: var(--edge);
+  stroke-width: 1;
+}
+
+.climb-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.climb-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.85rem;
+}
+
+.climb-chip {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+  transition:
+    color 0.18s var(--ease),
+    border-color 0.18s var(--ease);
+}
+
+.climb-chip[aria-pressed='true'] {
+  color: var(--night);
+  background: var(--glass);
+  border-color: var(--glass);
+}
+
+/* ─────────────────────────────────────────────────────────── cards */
+
+.cards {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  transition:
+    border-color 0.18s var(--ease),
+    background 0.18s var(--ease);
+}
+
+a.card:hover,
+a.card.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:focus-visible {
+  border-color: var(--edge-strong);
+  background: color-mix(in oklab, var(--court) 40%, transparent);
+}
+
+.card-title {
+  font-weight: 600;
+}
+
+.card-meta {
+  display: block;
+  color: var(--ink-faint);
+  font-size: 0.82rem;
+}
+
+.card-winner {
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+}
+
+.card-winner b {
+  display: block;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* A roster is a list of names, not eight rows of furniture. */
+.roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.roster-chip {
+  display: inline-block;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  transition:
+    border-color 0.18s var(--ease),
+    background 0.18s var(--ease);
+}
+
+.roster-chip:hover,
+.roster-chip:focus-visible {
+  border-color: var(--glass);
+  background: color-mix(in oklab, var(--glass) 12%, transparent);
+}
+
+/* ─────────────────────────────────────────────────────────── figures */
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: 1px;
+  background: var(--edge);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.figure {
+  background: var(--night);
+  padding: 0.9rem 1rem;
+}
+
+.figure dt {
+  /* Two lines' worth whether the label needs them or not, so every value in the row sits
+     on the same line. */
+  min-height: 2.4em;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.figure dd {
+  margin: 0.25rem 0 0;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+/* ─────────────────────────────────────────────────────────── states */
+
+.note {
+  color: var(--ink-dim);
+  padding: 2rem 0;
+}
+
+.note strong {
+  display: block;
+  color: var(--ink);
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+.back {
+  display: inline-block;
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+}
+
+.back:hover,
+.back.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:focus-visible {
+  color: var(--ink);
+}
+
+/* ─────────────────────────────────────────────────────────── motion */
+
+/* One orchestrated arrival: the courts rise as the floodlights come up. */
+.enter {
+  animation: rise 0.5s var(--ease) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (min-width: 40rem) {
+  .courts {
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  }
+}

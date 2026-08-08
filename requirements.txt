@@ -1,0 +1,7 @@
+# Vercel's Python runtime installs from this file. It mirrors the `api` and `db` extras;
+# uv.lock stays the source of truth for development and CI.
+fastapi>=0.141
+sqlalchemy[asyncio]>=2.0.36
+asyncpg>=0.30
+aiogram>=3.15
+python-dotenv>=1.0

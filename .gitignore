@@ -16,3 +16,7 @@ wheels/
 .env.local
 padel.db
 padel.db-journal
+web/node_modules/
+web/dist/
+.vercel/
+web/*.tsbuildinfo
