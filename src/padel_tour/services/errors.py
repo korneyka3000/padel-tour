@@ -80,6 +80,14 @@ class ForbiddenError(ServiceError):
     """Signed in, but not allowed to do this."""
 
 
+class NotSignedInError(AuthError):
+    """Nobody is signed in, and this needs somebody.
+
+    Separate from :class:`ForbiddenError` because the two ask for different things: one
+    wants a sign-in form, the other wants an invitation.
+    """
+
+
 class InviteNotFoundError(NotFoundError):
     """No such invitation, or it has expired."""
 

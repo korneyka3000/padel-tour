@@ -5,13 +5,45 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from conftest import NAMES, seed_tournament
+from conftest import NAMES, seed_tournament, sign_in
+from padel_tour.db import PROVIDER_EMAIL
 from padel_tour.engine import Format
-from padel_tour.services import finish_tournament
+from padel_tour.services import account_for_identity, finish_tournament
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from padel_tour.db import Account
+    from padel_tour.services import TournamentView
+    from padel_tour.services.mail import InMemoryMailer
+
+
+async def owner_account(session: AsyncSession, address: str) -> Account:
+    """The account a sign-in just created, from the other side of the transaction."""
+    account = await account_for_identity(session, PROVIDER_EMAIL, address)
+    assert account is not None
+    return account
+
+
+async def mine(
+    client: AsyncClient,
+    session: AsyncSession,
+    mailer: InMemoryMailer,
+    *,
+    rounds_to_play: int = 0,
+) -> TournamentView:
+    """Sign in, then seed a group this account owns.
+
+    Everything group-scoped is now private to its members, so a test that reads a roster,
+    an archive or a profile has to be somebody first.
+    """
+    address = await sign_in(client, mailer)
+    view = await seed_tournament(
+        session, rounds_to_play=rounds_to_play, owner=await owner_account(session, address)
+    )
+    await session.commit()
+    return view
 
 
 # --------------------------------------------------------------------------- meta
@@ -26,10 +58,10 @@ async def test_health_reports_the_database(client: AsyncClient) -> None:
 # --------------------------------------------------------------------------- groups
 
 
-async def test_groups_are_listed_with_their_size(
-    client: AsyncClient, session: AsyncSession
+async def test_your_groups_are_listed_with_their_size(
+    client: AsyncClient, session: AsyncSession, mailer: InMemoryMailer
 ) -> None:
-    await seed_tournament(session)
+    await mine(client, session, mailer)
 
     response = await client.get("/api/groups")
     assert response.status_code == 200
@@ -39,15 +71,18 @@ async def test_groups_are_listed_with_their_size(
     assert body[0]["player_count"] == 8
 
 
-async def test_a_group_carries_its_roster(client: AsyncClient, session: AsyncSession) -> None:
-    view = await seed_tournament(session)
+async def test_a_group_carries_its_roster(
+    client: AsyncClient, session: AsyncSession, mailer: InMemoryMailer
+) -> None:
+    view = await mine(client, session, mailer)
 
     response = await client.get(f"/api/groups/{view.group_id}")
     assert response.status_code == 200
     assert {player["name"] for player in response.json()["players"]} == set(NAMES)
 
 
-async def test_an_unknown_group_is_a_404(client: AsyncClient) -> None:
+async def test_an_unknown_group_is_a_404(client: AsyncClient, mailer: InMemoryMailer) -> None:
+    await sign_in(client, mailer)
     response = await client.get(f"/api/groups/{uuid.uuid7()}")
     assert response.status_code == 404
     assert "no group" in response.json()["detail"]
@@ -57,10 +92,10 @@ async def test_an_unknown_group_is_a_404(client: AsyncClient) -> None:
 
 
 async def test_an_idle_group_answers_204_not_404(
-    client: AsyncClient, session: AsyncSession
+    client: AsyncClient, session: AsyncSession, mailer: InMemoryMailer
 ) -> None:
     """An empty court is not an error — the group exists, it just is not playing."""
-    view = await seed_tournament(session)
+    view = await mine(client, session, mailer)
     await finish_tournament(session, view.id)
     await session.commit()
 
@@ -70,9 +105,9 @@ async def test_an_idle_group_answers_204_not_404(
 
 
 async def test_the_active_tournament_comes_back_whole(
-    client: AsyncClient, session: AsyncSession
+    client: AsyncClient, session: AsyncSession, mailer: InMemoryMailer
 ) -> None:
-    view = await seed_tournament(session, rounds_to_play=2)
+    view = await mine(client, session, mailer, rounds_to_play=2)
 
     response = await client.get(f"/api/groups/{view.group_id}/active")
     assert response.status_code == 200
@@ -144,9 +179,9 @@ async def test_an_unknown_tournament_is_a_404(client: AsyncClient) -> None:
 
 
 async def test_the_archive_lists_finished_tournaments(
-    client: AsyncClient, session: AsyncSession
+    client: AsyncClient, session: AsyncSession, mailer: InMemoryMailer
 ) -> None:
-    view = await seed_tournament(session, rounds_to_play=1)
+    view = await mine(client, session, mailer, rounds_to_play=1)
     await finish_tournament(session, view.id)
     await session.commit()
 
@@ -156,8 +191,10 @@ async def test_the_archive_lists_finished_tournaments(
     assert body[0]["winner_name"] in NAMES
 
 
-async def test_the_archive_is_pageable(client: AsyncClient, session: AsyncSession) -> None:
-    view = await seed_tournament(session)
+async def test_the_archive_is_pageable(
+    client: AsyncClient, session: AsyncSession, mailer: InMemoryMailer
+) -> None:
+    view = await mine(client, session, mailer)
     response = await client.get(
         f"/api/groups/{view.group_id}/tournaments", params={"limit": 1, "offset": 1}
     )
@@ -165,8 +202,10 @@ async def test_the_archive_is_pageable(client: AsyncClient, session: AsyncSessio
     assert response.json() == []
 
 
-async def test_a_silly_page_size_is_rejected(client: AsyncClient, session: AsyncSession) -> None:
-    view = await seed_tournament(session)
+async def test_a_silly_page_size_is_rejected(
+    client: AsyncClient, session: AsyncSession, mailer: InMemoryMailer
+) -> None:
+    view = await mine(client, session, mailer)
     response = await client.get(f"/api/groups/{view.group_id}/tournaments", params={"limit": 5000})
     assert response.status_code == 422
 
@@ -174,8 +213,10 @@ async def test_a_silly_page_size_is_rejected(client: AsyncClient, session: Async
 # --------------------------------------------------------------------------- players
 
 
-async def test_a_player_profile_adds_up(client: AsyncClient, session: AsyncSession) -> None:
-    view = await seed_tournament(session, rounds_to_play=2)
+async def test_a_player_profile_adds_up(
+    client: AsyncClient, session: AsyncSession, mailer: InMemoryMailer
+) -> None:
+    view = await mine(client, session, mailer, rounds_to_play=2)
     leader = view.standings[0]
 
     body = (await client.get(f"/api/players/{leader.player_id}")).json()
@@ -189,17 +230,18 @@ async def test_a_player_profile_adds_up(client: AsyncClient, session: AsyncSessi
 
 
 async def test_a_player_who_has_not_played_has_no_rank(
-    client: AsyncClient, session: AsyncSession
+    client: AsyncClient, session: AsyncSession, mailer: InMemoryMailer
 ) -> None:
     """Coming first in a tournament nobody played is not an achievement."""
-    view = await seed_tournament(session)
+    view = await mine(client, session, mailer)
     body = (await client.get(f"/api/players/{view.standings[0].player_id}")).json()
     assert body["matches"] == 0
     assert body["best_rank"] is None
     assert body["average_points"] == 0
 
 
-async def test_an_unknown_player_is_a_404(client: AsyncClient) -> None:
+async def test_an_unknown_player_is_a_404(client: AsyncClient, mailer: InMemoryMailer) -> None:
+    await sign_in(client, mailer)
     assert (await client.get(f"/api/players/{uuid.uuid7()}")).status_code == 404
 
 

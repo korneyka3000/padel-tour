@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from padel_tour.db import Group, GroupLink, Player
 
@@ -84,6 +84,23 @@ async def list_groups(session: AsyncSession) -> list[GroupView]:
         .order_by(Group.name)
     )
     return [_to_group_view(group, total) for group, total in rows]
+
+
+async def groups_for_account(session: AsyncSession, account: Account) -> list[GroupView]:
+    """The groups this account belongs to — as a player, or as the owner.
+
+    An owner who has not claimed a player of their own still belongs to their group, which
+    is why this is two conditions rather than one join.
+    """
+    mine = select(Player.group_id).where(Player.account_id == account.id)
+    ids = set(
+        await session.scalars(
+            select(Group.id).where(
+                or_(Group.owner_account_id == account.id, Group.id.in_(mine)),
+            )
+        )
+    )
+    return [group for group in await list_groups(session) if group.id in ids]
 
 
 async def group_for_link(
