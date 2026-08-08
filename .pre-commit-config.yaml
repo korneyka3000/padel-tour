@@ -30,3 +30,31 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
+
+      # Both CI failures so far were things a commit hook could not see: a stale ruff
+      # cache hiding an import-order change, and code that only breaks on Postgres. This
+      # runs what CI runs, on the whole tree, with no cache — before anything leaves the
+      # machine. `uv run prek install --hook-type pre-push` wires it up.
+      - id: ci-parity
+        name: full check (what CI runs)
+        entry: uv run ruff check --no-cache .
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: format-parity
+        name: format check (what CI runs)
+        entry: uv run ruff format --no-cache --check .
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: types-parity
+        name: ty (what CI runs)
+        entry: uv run ty check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

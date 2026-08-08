@@ -10,7 +10,7 @@ can be tested without Telegram.
 Requires the ``bot`` and ``db`` extras.
 """
 
-from .app import main, run
+from .app import cli, main
 from .config import BotConfig, MissingTokenError, load_config
 
-__all__ = ["BotConfig", "MissingTokenError", "load_config", "main", "run"]
+__all__ = ["BotConfig", "MissingTokenError", "cli", "load_config", "main"]
