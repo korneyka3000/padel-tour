@@ -18,9 +18,14 @@ db = [
     "asyncpg>=0.30",
     "sqlalchemy[asyncio]>=2.0.36",
 ]
+bot = [
+    "aiogram>=3.15",
+    "python-dotenv>=1.0",
+]
 
 [project.scripts]
 padel-tour = "padel_tour.cli:app"
+padel-tour-bot = "padel_tour.bot.app:main"
 
 # A backend is needed so `uv sync` installs the project: the src/ layout makes
 # `import padel_tour` resolvable and creates the `padel-tour` entry point.

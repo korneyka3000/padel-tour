@@ -99,6 +99,8 @@ class TournamentView:
     finished: bool
     created_at: datetime
     finished_at: datetime | None
+    #: Telegram id of whoever started it, when it was started from a chat.
+    organiser_telegram_id: int | None
     rounds: tuple[RoundView, ...]
     standings: tuple[StandingView, ...]
     progression: dict[uuid.UUID, tuple[ProgressPoint, ...]]

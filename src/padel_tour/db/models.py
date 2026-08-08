@@ -145,6 +145,14 @@ class Tournament(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, default=None)
 
+    #: The single Telegram message the bot keeps redrawing for this tournament. Storing it
+    #: is what lets a restarted bot pick up the same screen instead of posting a new one.
+    screen_chat_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    screen_message_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    #: Telegram id of whoever started this. Scoring stays open to everyone in the chat;
+    #: ending or redrawing takes the game away from the others, so it stays with them.
+    organiser_telegram_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
+
     group: Mapped[Group] = relationship(back_populates="tournaments")
     entries: Mapped[list[TournamentPlayer]] = relationship(
         back_populates="tournament",
