@@ -14,7 +14,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from itertools import groupby
 
-from .models import PlayerId, ProgressPoint, StandingRow, TournamentState
+from .models import Match, PlayerId, ProgressPoint, StandingRow, TournamentState
 
 
 @dataclass(slots=True)
@@ -31,6 +31,38 @@ class _Tally:
         return self.points_for - self.points_against
 
 
+def _record_match(
+    match: Match,
+    tallies: dict[PlayerId, _Tally],
+    head_to_head: dict[tuple[PlayerId, PlayerId], int],
+) -> None:
+    """Fold one played match into the running tallies."""
+    if match.result is None:
+        return
+    score_a, score_b = match.result.score_a, match.result.score_b
+
+    for team, scored, conceded in (
+        (match.team_a, score_a, score_b),
+        (match.team_b, score_b, score_a),
+    ):
+        for player in team:
+            tally = tallies[player]
+            tally.played += 1
+            tally.points_for += scored
+            tally.points_against += conceded
+            if scored > conceded:
+                tally.wins += 1
+            elif scored == conceded:
+                tally.draws += 1
+            else:
+                tally.losses += 1
+
+    for left in match.team_a:
+        for right in match.team_b:
+            head_to_head[(left, right)] += score_a
+            head_to_head[(right, left)] += score_b
+
+
 def _collect(
     state: TournamentState, through_round: int | None
 ) -> tuple[dict[PlayerId, _Tally], dict[tuple[PlayerId, PlayerId], int]]:
@@ -42,28 +74,7 @@ def _collect(
         if through_round is not None and rnd.number > through_round:
             continue
         for match in rnd.matches:
-            if match.result is None:
-                continue
-            score_a, score_b = match.result.score_a, match.result.score_b
-            for team, scored, conceded in (
-                (match.team_a, score_a, score_b),
-                (match.team_b, score_b, score_a),
-            ):
-                for player in team:
-                    tally = tallies[player]
-                    tally.played += 1
-                    tally.points_for += scored
-                    tally.points_against += conceded
-                    if scored > conceded:
-                        tally.wins += 1
-                    elif scored == conceded:
-                        tally.draws += 1
-                    else:
-                        tally.losses += 1
-            for left in match.team_a:
-                for right in match.team_b:
-                    head_to_head[(left, right)] += score_a
-                    head_to_head[(right, left)] += score_b
+            _record_match(match, tallies, head_to_head)
 
     return tallies, head_to_head
 

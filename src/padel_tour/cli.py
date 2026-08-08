@@ -12,9 +12,8 @@ Requires the optional ``cli`` extra; the engine itself has no dependencies.
 from __future__ import annotations
 
 import secrets
-from collections.abc import Sequence
 from random import Random
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
@@ -23,6 +22,7 @@ from rich.table import Table
 from .engine import (
     COMMON_POINT_TARGETS,
     Format,
+    Match,
     PadelEngineError,
     PairingPattern,
     PlayerId,
@@ -33,7 +33,6 @@ from .engine import (
     create_mexicano,
     finish,
     next_round,
-    pending_matches,
     progression,
     record_result,
     reroll,
@@ -42,6 +41,9 @@ from .engine import (
 )
 from .engine.roster import validate_roster
 from .engine.whist import require_supported_player_count
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 app = typer.Typer(
     name="padel-tour",
@@ -139,14 +141,16 @@ def show_progress(state: TournamentState) -> None:
 def parse_score(raw: str, target: int) -> tuple[int, int]:
     """Accept ``14 10``, ``14:10``, ``14-10`` or just ``14`` — one number implies the other."""
     digits = "".join(char if char.isdigit() else " " for char in raw).split()
-    if len(digits) == 1:
-        scored = int(digits[0])
-        if scored > target:
-            raise ValueError(f"the match runs to {target} points, {scored} is too many")
-        return scored, target - scored
-    if len(digits) == 2:
-        return int(digits[0]), int(digits[1])
-    raise ValueError("enter a score like '14 10', or just '14'")
+    match digits:
+        case [only]:
+            scored = int(only)
+            if scored > target:
+                raise ValueError(f"the match runs to {target} points, {scored} is too many")
+            return scored, target - scored
+        case [left, right]:
+            return int(left), int(right)
+        case _:
+            raise ValueError("enter a score like '14 10', or just '14'")
 
 
 def choose[T](prompt: str, options: Sequence[tuple[T, str]], default: int = 1) -> T:
@@ -220,14 +224,44 @@ def confirm_draw(state: TournamentState) -> TournamentState:
                 f"\n[bold]Draw for {len(state.players)} players, {state.total_rounds} rounds[/bold]"
             )
             show_schedule(state)
-        else:
-            current = state.current_round
-            assert current is not None
+        elif (current := state.current_round) is not None:
             show_round(state, current)
 
         if not typer.confirm("\nRedraw?", default=False):
             return state
         state = reroll(state)
+
+
+def next_unfinished_round(state: TournamentState) -> Round | None:
+    """The earliest round still missing a result."""
+    return next((rnd for rnd in state.rounds if not rnd.complete), None)
+
+
+def ask_result(state: TournamentState, rnd: Round, match: Match) -> TournamentState:
+    """Prompt until this court has a legal score, or the organiser ends the tournament."""
+    target = state.config.points_per_match
+    label = f"{match.team_a.a}+{match.team_a.b} vs {match.team_b.a}+{match.team_b.b}"
+    while True:
+        raw = typer.prompt(f"  court {match.court}  {label}")
+        if raw.strip().lower() == "q":
+            return finish(state)
+        try:
+            score_a, score_b = parse_score(raw, target)
+            return record_result(state, rnd.number, match.court, score_a, score_b)
+        except (ValueError, PadelEngineError) as exc:
+            console.print(f"    [red]{exc}[/red]")
+
+
+def score_round(state: TournamentState, rnd: Round) -> TournamentState:
+    """Collect every outstanding score in one round."""
+    show_round(state, rnd)
+    for match in rnd.matches:
+        if match.played:
+            continue
+        state = ask_result(state, rnd, match)
+        if state.finished:
+            break
+    return state
 
 
 def run(state: TournamentState) -> None:
@@ -238,38 +272,15 @@ def run(state: TournamentState) -> None:
     )
 
     while not state.finished:
-        pending = pending_matches(state)
-        if not pending:
-            if state.config.format is Format.MEXICANO and len(state.rounds) < state.total_rounds:
-                state = next_round(state)
-                continue
-            state = finish(state)
-            break
+        rnd = next_unfinished_round(state)
+        if rnd is None:
+            more_to_draw = (
+                state.config.format is Format.MEXICANO and len(state.rounds) < state.total_rounds
+            )
+            state = next_round(state) if more_to_draw else finish(state)
+            continue
 
-        round_no = pending[0][0]
-        rnd = state.round_by_number(round_no)
-        assert rnd is not None
-        show_round(state, rnd)
-
-        for match in rnd.matches:
-            if match.played:
-                continue
-            label = f"{match.team_a.a}+{match.team_a.b} vs {match.team_b.a}+{match.team_b.b}"
-            while True:
-                raw = typer.prompt(f"  court {match.court}  {label}")
-                if raw.strip().lower() == "q":
-                    state = finish(state)
-                    break
-                try:
-                    score_a, score_b = parse_score(raw, target)
-                    state = record_result(state, round_no, match.court, score_a, score_b)
-                except (ValueError, PadelEngineError) as exc:
-                    console.print(f"    [red]{exc}[/red]")
-                    continue
-                break
-            if state.finished:
-                break
-
+        state = score_round(state, rnd)
         if not state.finished:
             show_table(state)
             show_progress(state)
@@ -321,8 +332,9 @@ def demo(seed: SeedOption = None) -> None:
     for number in range(1, 6):
         if number > 1:
             state = next_round(state)
-        current = state.current_round
-        assert current is not None
+        current = next_unfinished_round(state)
+        if current is None:
+            break
         show_round(state, current)
         for match in current.matches:
             scored = rng.randrange(target + 1)

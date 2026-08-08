@@ -6,17 +6,17 @@ from dataclasses import replace
 from random import Random
 
 import pytest
-from conftest import mexicano, play_round, roster
+from conftest import americano, mexicano, play_round, roster
 
 from padel_tour.engine import (
     Format,
-    InvalidConfig,
-    NoMoreRounds,
+    InvalidConfigError,
+    NoMoreRoundsError,
     PairingPattern,
-    RoundIncomplete,
+    RoundIncompleteError,
     TournamentConfig,
-    TournamentFinished,
-    WrongFormat,
+    TournamentFinishedError,
+    WrongFormatError,
     create_mexicano,
     finish,
     next_round,
@@ -46,7 +46,7 @@ def test_opening_round_is_random_not_roster_order() -> None:
 
 def test_next_round_requires_a_complete_current_round() -> None:
     state = record_result(mexicano(8), 1, 1, 14, 10)
-    with pytest.raises(RoundIncomplete, match="unfinished"):
+    with pytest.raises(RoundIncompleteError, match="unfinished"):
         next_round(state)
 
 
@@ -92,7 +92,7 @@ def test_the_last_round_ends_the_tournament() -> None:
     state = next_round(state)
     state = play_round(state, 2, Random(2))
     assert state.finished
-    with pytest.raises(TournamentFinished):
+    with pytest.raises(TournamentFinishedError):
         next_round(state)
 
 
@@ -102,30 +102,28 @@ def test_round_budget_is_enforced_independently_of_the_finished_flag() -> None:
     state = play_round(state, 1, Random(1))
     state = next_round(state)
     state = play_round(state, 2, Random(2))
-    with pytest.raises(NoMoreRounds, match="all 2 rounds"):
+    with pytest.raises(NoMoreRoundsError, match="all 2 rounds"):
         next_round(replace(state, finished=False))
 
 
 def test_next_round_after_finish_is_refused() -> None:
     state = finish(play_round(mexicano(8), 1, Random(1)))
-    with pytest.raises(TournamentFinished):
+    with pytest.raises(TournamentFinishedError):
         next_round(state)
 
 
 def test_next_round_is_americano_nonsense() -> None:
-    from conftest import americano
-
-    with pytest.raises(WrongFormat):
+    with pytest.raises(WrongFormatError):
         next_round(americano(8))
 
 
 def test_mexicano_config_needs_a_round_count() -> None:
-    with pytest.raises(InvalidConfig, match="number of rounds"):
+    with pytest.raises(InvalidConfigError, match="number of rounds"):
         TournamentConfig(Format.MEXICANO)
 
 
 def test_create_mexicano_rejects_an_americano_config() -> None:
-    with pytest.raises(WrongFormat):
+    with pytest.raises(WrongFormatError):
         create_mexicano(roster(8), TournamentConfig(Format.AMERICANO), seed=1)
 
 

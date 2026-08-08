@@ -26,7 +26,12 @@ from __future__ import annotations
 from collections import Counter
 from itertools import combinations
 
-from .errors import InvalidPlayerCount, UnsupportedPlayerCount
+from .errors import InvalidPlayerCountError, UnsupportedPlayerCountError
+from .models import PLAYERS_PER_COURT
+
+#: The two properties that define a whist design.
+PARTNERSHIPS_PER_PAIR = 1
+OPPOSITIONS_PER_PAIR = 2
 
 #: A position in the design. Non-negative values are elements of ``Z_{n-1}``; ``INF`` is the
 #: fixed point that does not rotate.
@@ -81,10 +86,12 @@ def require_supported_player_count(count: int) -> None:
     obvious fix, while a supported-shape-but-unknown count is an engine limitation.
     """
     options = ", ".join(str(value) for value in supported_player_counts())
-    if count < 4 or count % 4 != 0:
-        raise InvalidPlayerCount(f"player count must be a multiple of 4 ({options}) — got {count}")
+    if count < PLAYERS_PER_COURT or count % PLAYERS_PER_COURT != 0:
+        raise InvalidPlayerCountError(
+            f"player count must be a multiple of {PLAYERS_PER_COURT} ({options}) — got {count}"
+        )
     if count not in STARTERS:
-        raise UnsupportedPlayerCount(
+        raise UnsupportedPlayerCountError(
             f"a schedule is known for {options} players — {count} is not supported yet"
         )
 
@@ -120,42 +127,50 @@ def whist_design(count: int) -> Design:
     return generate_from_starter(STARTERS[count], count)
 
 
-def design_defects(design: Design, count: int) -> list[str]:
-    """Every way ``design`` fails to be a whist design. Empty list means valid.
-
-    Returning the reasons rather than a bare bool is what makes a failing test useful.
-    """
-    defects: list[str] = []
-    expected_slots = set(slots_for(count))
-    expected_courts = count // 4
-
-    if len(design) != count - 1:
-        defects.append(f"{len(design)} rounds, expected {count - 1}")
-
+def _tally_pairs(design: Design) -> tuple[Counter[frozenset[Slot]], Counter[frozenset[Slot]]]:
+    """Count how often each pair of slots partners and how often it opposes."""
     partners: Counter[frozenset[Slot]] = Counter()
     opponents: Counter[frozenset[Slot]] = Counter()
-
-    for index, rnd in enumerate(design, start=1):
-        if len(rnd) != expected_courts:
-            defects.append(f"round {index}: {len(rnd)} games, expected {expected_courts}")
-        appearances: Counter[Slot] = Counter()
+    for rnd in design:
         for team_a, team_b in rnd:
             partners[frozenset(team_a)] += 1
             partners[frozenset(team_b)] += 1
             for left in team_a:
                 for right in team_b:
                     opponents[frozenset((left, right))] += 1
-            appearances.update(team_a)
-            appearances.update(team_b)
-        if set(appearances) != expected_slots or any(v != 1 for v in appearances.values()):
+    return partners, opponents
+
+
+def design_defects(design: Design, count: int) -> list[str]:
+    """Every way ``design`` fails to be a whist design. Empty list means valid.
+
+    Returning the reasons rather than a bare bool is what makes a failing test useful.
+    """
+    defects: list[str] = []
+    expected_slots = sorted(slots_for(count))
+    expected_courts = count // PLAYERS_PER_COURT
+
+    if len(design) != count - 1:
+        defects.append(f"{len(design)} rounds, expected {count - 1}")
+
+    for index, rnd in enumerate(design, start=1):
+        if len(rnd) != expected_courts:
+            defects.append(f"round {index}: {len(rnd)} games, expected {expected_courts}")
+        appearing = sorted(slot for game in rnd for pair in game for slot in pair)
+        if appearing != expected_slots:
             defects.append(f"round {index}: every player must appear exactly once")
 
-    for left, right in combinations(sorted(expected_slots), 2):
+    partners, opponents = _tally_pairs(design)
+    for left, right in combinations(expected_slots, 2):
         pair = frozenset((left, right))
-        if partners[pair] != 1:
-            defects.append(f"{left}&{right} partner {partners[pair]} times, expected 1")
-        if opponents[pair] != 2:
-            defects.append(f"{left}&{right} oppose {opponents[pair]} times, expected 2")
+        if partners[pair] != PARTNERSHIPS_PER_PAIR:
+            defects.append(
+                f"{left}&{right} partner {partners[pair]} times, expected {PARTNERSHIPS_PER_PAIR}"
+            )
+        if opponents[pair] != OPPOSITIONS_PER_PAIR:
+            defects.append(
+                f"{left}&{right} oppose {opponents[pair]} times, expected {OPPOSITIONS_PER_PAIR}"
+            )
 
     return defects
 
@@ -165,100 +180,117 @@ def is_valid_whist_design(design: Design, count: int) -> bool:
     return not design_defects(design, count)
 
 
+#: One applied difference: ``(is_partner, difference class)``. Enough to undo a placement.
+_Applied = list[tuple[bool, int]]
+
+
+class _DifferenceLedger:
+    """Tracks how many times each difference class has been spent, and enforces the limits.
+
+    A game can be placed only if it keeps every partner class at one use and every opponent
+    class at two. Placement is all-or-nothing: on conflict the ledger rolls itself back.
+    """
+
+    def __init__(self, modulus: int) -> None:
+        self._modulus = modulus
+        classes = modulus // 2 + 1
+        self._partner = [0] * classes
+        self._opponent = [0] * classes
+
+    def _class_of(self, left: Slot, right: Slot) -> int:
+        delta = (left - right) % self._modulus
+        return min(delta, self._modulus - delta)
+
+    def place(self, game: SlotGame) -> _Applied | None:
+        """Spend a game's differences, or roll back and return ``None`` on a conflict."""
+        applied: _Applied = []
+        for left, right in game:
+            if INF in (left, right):
+                continue
+            cls = self._class_of(left, right)
+            if self._partner[cls] >= PARTNERSHIPS_PER_PAIR:
+                self.undo(applied)
+                return None
+            self._partner[cls] += 1
+            applied.append((True, cls))
+        for left in game[0]:
+            for right in game[1]:
+                if INF in (left, right):
+                    continue
+                cls = self._class_of(left, right)
+                if self._opponent[cls] >= OPPOSITIONS_PER_PAIR:
+                    self.undo(applied)
+                    return None
+                self._opponent[cls] += 1
+                applied.append((False, cls))
+        return applied
+
+    def undo(self, applied: _Applied) -> None:
+        for is_partner, cls in applied:
+            if is_partner:
+                self._partner[cls] -= 1
+            else:
+                self._opponent[cls] -= 1
+
+
+def _extend_starter(
+    remaining: tuple[Slot, ...], games: list[SlotGame], ledger: _DifferenceLedger
+) -> Starter | None:
+    """Fill the remaining slots into games, backtracking on conflict.
+
+    Every game must contain the smallest still-unused slot, which removes permutations of
+    otherwise identical partitions from the search.
+    """
+    if not remaining:
+        return tuple(games)
+
+    head, *rest = remaining
+    pool = tuple(rest)
+    for trio in combinations(pool, 3):
+        for partner_index in range(3):
+            partner = trio[partner_index]
+            others = tuple(value for i, value in enumerate(trio) if i != partner_index)
+            game: SlotGame = ((head, partner), (others[0], others[1]))
+            applied = ledger.place(game)
+            if applied is None:
+                continue
+            games.append(game)
+            found = _extend_starter(tuple(v for v in pool if v not in trio), games, ledger)
+            if found is not None:
+                return found
+            games.pop()
+            ledger.undo(applied)
+    return None
+
+
 def search_starter(count: int) -> Starter | None:
     """Search for a Z-cyclic starter for ``count`` players.
 
-    Used offline to populate :data:`STARTERS`; kept in the package so a starter can always
-    be recomputed rather than trusted. Returns ``None`` if no Z-cyclic starter exists.
+    Used offline to populate :data:`STARTERS`; kept in the package so a starter can always be
+    recomputed rather than trusted. Returns ``None`` if no Z-cyclic starter exists.
 
-    Backtracking over the difference conditions, with two reductions that make it fast:
+    The whole starter can be translated freely, so ∞'s partner is pinned to ``0``.
 
-    * the whole starter can be translated freely, so ∞'s partner is fixed to ``0``;
-    * each subsequent game must contain the smallest still-unused element, which removes
-      permutations of otherwise identical partitions.
-
-    Local limits are sufficient: the game count makes the number of finite partner pairs
-    exactly equal to the number of difference classes, and the number of finite opponent
-    pairs exactly twice that. Filling every game without exceeding a limit therefore means
-    hitting every limit exactly.
+    Enforcing the per-class limits locally is enough to guarantee a valid design: the game
+    count makes the number of finite partner pairs exactly equal to the number of difference
+    classes, and the number of finite opponent pairs exactly twice that. Filling every game
+    without exceeding a limit therefore means hitting every limit exactly.
     """
-    if count < 4 or count % 4 != 0:
+    if count < PLAYERS_PER_COURT or count % PLAYERS_PER_COURT != 0:
         return None
 
     modulus = count - 1
-    class_count = modulus // 2
-
-    def difference_class(left: int, right: int) -> int:
-        delta = (left - right) % modulus
-        return min(delta, modulus - delta)
-
-    partner_used = [False] * (class_count + 1)
-    opponent_count = [0] * (class_count + 1)
-
-    def undo(applied: list[tuple[str, int]]) -> None:
-        for kind, cls in applied:
-            if kind == "p":
-                partner_used[cls] = False
-            else:
-                opponent_count[cls] -= 1
-
-    def place(game: SlotGame) -> list[tuple[str, int]] | None:
-        """Apply a game's differences, or undo and return None on a conflict."""
-        applied: list[tuple[str, int]] = []
-        for pair in game:
-            left, right = pair
-            if left == INF or right == INF:
-                continue
-            cls = difference_class(left, right)
-            if partner_used[cls]:
-                undo(applied)
-                return None
-            partner_used[cls] = True
-            applied.append(("p", cls))
-        for left in game[0]:
-            for right in game[1]:
-                if left == INF or right == INF:
-                    continue
-                cls = difference_class(left, right)
-                if opponent_count[cls] >= 2:
-                    undo(applied)
-                    return None
-                opponent_count[cls] += 1
-                applied.append(("o", cls))
-        return applied
-
-    solution: Starter | None = None
-
-    def extend(remaining: tuple[int, ...], games: list[SlotGame]) -> bool:
-        nonlocal solution
-        if not remaining:
-            solution = tuple(games)
-            return True
-        head, *rest = remaining
-        pool = tuple(rest)
-        for trio in combinations(pool, 3):
-            for partner_index in range(3):
-                partner = trio[partner_index]
-                others = tuple(v for i, v in enumerate(trio) if i != partner_index)
-                game: SlotGame = ((head, partner), (others[0], others[1]))
-                applied = place(game)
-                if applied is None:
-                    continue
-                games.append(game)
-                if extend(tuple(v for v in pool if v not in trio), games):
-                    return True
-                games.pop()
-                undo(applied)
-        return False
+    ledger = _DifferenceLedger(modulus)
 
     for left, right in combinations(range(1, modulus), 2):
-        first: SlotGame = ((INF, 0), (left, right))
-        applied = place(first)
+        opening: SlotGame = ((INF, 0), (left, right))
+        applied = ledger.place(opening)
         if applied is None:
             continue
-        rest = tuple(v for v in range(1, modulus) if v not in (left, right))
-        if extend(rest, [first]):
-            return solution
-        undo(applied)
+        rest = tuple(value for value in range(1, modulus) if value not in (left, right))
+        found = _extend_starter(rest, [opening], ledger)
+        if found is not None:
+            return found
+        ledger.undo(applied)
 
     return None

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections import Counter
-from random import Random
+from typing import TYPE_CHECKING
 
 import pytest
 
 from padel_tour.engine import (
     Format,
+    PairingPattern,
     PlayerId,
     TournamentConfig,
     TournamentState,
@@ -16,6 +17,9 @@ from padel_tour.engine import (
     create_mexicano,
     record_result,
 )
+
+if TYPE_CHECKING:
+    from random import Random
 
 
 def roster(size: int) -> tuple[PlayerId, ...]:
@@ -34,7 +38,12 @@ def americano(size: int = 8, *, seed: int = 1, points: int = 24) -> TournamentSt
 
 
 def mexicano(
-    size: int = 8, *, seed: int = 1, points: int = 24, rounds: int = 5, pattern=None
+    size: int = 8,
+    *,
+    seed: int = 1,
+    points: int = 24,
+    rounds: int = 5,
+    pattern: PairingPattern | None = None,
 ) -> TournamentState:
     kwargs = {} if pattern is None else {"pairing_pattern": pattern}
     config = TournamentConfig(Format.MEXICANO, points_per_match=points, rounds=rounds, **kwargs)

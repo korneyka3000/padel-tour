@@ -6,11 +6,14 @@ engine only ever compares and orders ids.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
-from .errors import InvalidConfig
+from .errors import InvalidConfigError
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 PlayerId = str
 
@@ -20,6 +23,9 @@ COMMON_POINT_TARGETS: tuple[int, ...] = (16, 21, 24, 32)
 
 #: Fewest points a match can be played to.
 MIN_POINT_TARGET = 4
+
+#: Doubles. This is why rosters must be a multiple of four and why courts hold four players.
+PLAYERS_PER_COURT = 4
 
 
 class Format(StrEnum):
@@ -63,7 +69,7 @@ class Team:
         yield self.b
 
     def __contains__(self, player: object) -> bool:
-        return player == self.a or player == self.b
+        return player in (self.a, self.b)
 
     def as_set(self) -> frozenset[PlayerId]:
         return frozenset((self.a, self.b))
@@ -118,19 +124,19 @@ class TournamentConfig:
 
     def __post_init__(self) -> None:
         if self.points_per_match < MIN_POINT_TARGET:
-            raise InvalidConfig(
+            raise InvalidConfigError(
                 f"a match must run to at least {MIN_POINT_TARGET} points, "
                 f"got {self.points_per_match}"
             )
         if self.format is Format.AMERICANO and self.rounds is not None:
-            raise InvalidConfig(
+            raise InvalidConfigError(
                 "an Americano runs a fixed n-1 rounds; its round count is not configurable"
             )
         if self.format is Format.MEXICANO:
             if self.rounds is None:
-                raise InvalidConfig("a Mexicano has no natural end — set the number of rounds")
+                raise InvalidConfigError("a Mexicano has no natural end — set the number of rounds")
             if self.rounds < 1:
-                raise InvalidConfig(f"need at least one round, got {self.rounds}")
+                raise InvalidConfigError(f"need at least one round, got {self.rounds}")
 
 
 @dataclass(frozen=True, slots=True)

@@ -43,7 +43,12 @@ uv run ty check                # типы
 
 ```python
 from padel_tour.engine import (
-    Format, TournamentConfig, create_americano, record_result, standings, progression,
+    Format,
+    TournamentConfig,
+    create_americano,
+    record_result,
+    standings,
+    progression,
 )
 
 players = ["Аня", "Боря", "Вика", "Гриша", "Даша", "Егор", "Жанна", "Зина"]
@@ -55,7 +60,7 @@ state = record_result(state, round_no=1, court=1, score_a=14, score_b=10)
 for row in standings(state):
     print(row.rank, row.player, row.points_for)
 
-series = progression(state)   # данные для графика «матч за матчем»
+series = progression(state)  # данные для графика «матч за матчем»
 ```
 
 Mexicano отличается тем, что раунды приходят по одному:

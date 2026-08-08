@@ -7,13 +7,16 @@ slots. That is why a reroll can never produce a worse schedule — only a differ
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from random import Random
+from typing import TYPE_CHECKING
 
-from .errors import WrongFormat
+from .errors import WrongFormatError
 from .models import Format, Match, PlayerId, Round, Team, TournamentConfig, TournamentState
 from .roster import validate_roster
 from .whist import require_supported_player_count, slots_for, whist_design
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 
 def create_americano(
@@ -25,7 +28,7 @@ def create_americano(
     roster always produce the same schedule.
     """
     if config.format is not Format.AMERICANO:
-        raise WrongFormat(f"create_americano called with format {config.format}")
+        raise WrongFormatError(f"create_americano called with format {config.format}")
 
     roster = validate_roster(players)
     require_supported_player_count(len(roster))

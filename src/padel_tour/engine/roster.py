@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
-from .errors import DuplicatePlayer, InvalidPlayerCount
-from .models import PlayerId
+from .errors import DuplicatePlayerError, InvalidPlayerCountError
+from .models import PLAYERS_PER_COURT
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from .models import PlayerId
 
 
 def validate_roster(players: Iterable[PlayerId]) -> tuple[PlayerId, ...]:
@@ -19,11 +24,12 @@ def validate_roster(players: Iterable[PlayerId]) -> tuple[PlayerId, ...]:
 
     duplicates = [player for player, count in Counter(roster).items() if count > 1]
     if duplicates:
-        raise DuplicatePlayer(f"repeated in the roster: {', '.join(sorted(duplicates))}")
+        raise DuplicatePlayerError(f"repeated in the roster: {', '.join(sorted(duplicates))}")
 
-    if len(roster) < 4 or len(roster) % 4 != 0:
-        raise InvalidPlayerCount(
-            f"player count must be a multiple of 4 (4, 8, 12, 16, …) — got {len(roster)}"
+    if len(roster) < PLAYERS_PER_COURT or len(roster) % PLAYERS_PER_COURT != 0:
+        raise InvalidPlayerCountError(
+            f"player count must be a multiple of {PLAYERS_PER_COURT} "
+            f"(4, 8, 12, 16, …) — got {len(roster)}"
         )
 
     return roster

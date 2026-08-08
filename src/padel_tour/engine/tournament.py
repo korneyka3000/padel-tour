@@ -10,11 +10,11 @@ from random import Random
 
 from .americano import create_americano
 from .errors import (
-    CannotRerollAfterStart,
-    InvalidScore,
-    ResultAlreadyRecorded,
-    TournamentFinished,
-    UnknownMatch,
+    InvalidScoreError,
+    RerollTooLateError,
+    ResultAlreadyRecordedError,
+    TournamentFinishedError,
+    UnknownMatchError,
 )
 from .mexicano import create_mexicano
 from .models import Format, Match, MatchResult, Round, TournamentState
@@ -37,11 +37,9 @@ def reroll(state: TournamentState, *, seed: int | None = None) -> TournamentStat
     Only allowed before the first result: once a match has been scored, the draw is history.
     """
     if state.finished:
-        raise TournamentFinished("the tournament is over — nothing left to redraw")
+        raise TournamentFinishedError("the tournament is over — nothing left to redraw")
     if state.started:
-        raise CannotRerollAfterStart(
-            "results have been recorded — the draw can no longer be changed"
-        )
+        raise RerollTooLateError("results have been recorded — the draw can no longer be changed")
 
     new_seed = seed if seed is not None else _derive_seed(state.seed)
     if state.config.format is Format.AMERICANO:
@@ -52,9 +50,9 @@ def reroll(state: TournamentState, *, seed: int | None = None) -> TournamentStat
 def _validate_score(state: TournamentState, score_a: int, score_b: int) -> None:
     target = state.config.points_per_match
     if score_a < 0 or score_b < 0:
-        raise InvalidScore(f"scores cannot be negative: {score_a}:{score_b}")
+        raise InvalidScoreError(f"scores cannot be negative: {score_a}:{score_b}")
     if score_a + score_b != target:
-        raise InvalidScore(
+        raise InvalidScoreError(
             f"the match runs to {target} points, so the scores must add up to {target} — "
             f"got {score_a}+{score_b}={score_a + score_b}"
         )
@@ -63,11 +61,11 @@ def _validate_score(state: TournamentState, score_a: int, score_b: int) -> None:
 def _locate(state: TournamentState, round_no: int, court: int) -> tuple[Round, Match]:
     rnd = state.round_by_number(round_no)
     if rnd is None:
-        raise UnknownMatch(f"round {round_no} has not been drawn yet")
+        raise UnknownMatchError(f"round {round_no} has not been drawn yet")
     for match in rnd.matches:
         if match.court == court:
             return rnd, match
-    raise UnknownMatch(f"round {round_no} has no court {court}")
+    raise UnknownMatchError(f"round {round_no} has no court {court}")
 
 
 def _with_result(
@@ -90,12 +88,12 @@ def record_result(
 ) -> TournamentState:
     """Score a match. Auto-finishes the tournament once the last round is complete."""
     if state.finished:
-        raise TournamentFinished("the tournament is over — no more results accepted")
+        raise TournamentFinishedError("the tournament is over — no more results accepted")
 
     _validate_score(state, score_a, score_b)
     _, match = _locate(state, round_no, court)
     if match.result is not None:
-        raise ResultAlreadyRecorded(
+        raise ResultAlreadyRecordedError(
             f"round {round_no} court {court} already scored "
             f"({match.result.score_a}:{match.result.score_b}) — use amend_result"
         )

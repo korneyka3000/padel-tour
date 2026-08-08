@@ -8,14 +8,14 @@ import pytest
 from conftest import americano, opponent_counts, partner_counts, roster
 
 from padel_tour.engine import (
-    CannotRerollAfterStart,
-    DuplicatePlayer,
+    DuplicatePlayerError,
     Format,
-    InvalidConfig,
-    InvalidPlayerCount,
+    InvalidConfigError,
+    InvalidPlayerCountError,
+    RerollTooLateError,
     TournamentConfig,
-    UnsupportedPlayerCount,
-    WrongFormat,
+    UnsupportedPlayerCountError,
+    WrongFormatError,
     create_americano,
     record_result,
     reroll,
@@ -88,23 +88,23 @@ def test_reroll_with_explicit_seed() -> None:
 
 def test_reroll_is_refused_once_a_result_exists() -> None:
     state = record_result(americano(8), 1, 1, 14, 10)
-    with pytest.raises(CannotRerollAfterStart):
+    with pytest.raises(RerollTooLateError):
         reroll(state)
 
 
 @pytest.mark.parametrize("size", [1, 5, 9, 11])
 def test_player_count_must_be_a_multiple_of_four(size: int) -> None:
-    with pytest.raises(InvalidPlayerCount):
+    with pytest.raises(InvalidPlayerCountError):
         americano(size)
 
 
 def test_supported_but_unscheduled_count_is_reported_separately() -> None:
-    with pytest.raises(UnsupportedPlayerCount):
+    with pytest.raises(UnsupportedPlayerCountError):
         create_americano(roster(28), TournamentConfig(Format.AMERICANO), seed=1)
 
 
 def test_duplicate_players_are_rejected() -> None:
-    with pytest.raises(DuplicatePlayer):
+    with pytest.raises(DuplicatePlayerError):
         create_americano(
             ["A", "B", "C", "A", "E", "F", "G", "H"],
             TournamentConfig(Format.AMERICANO),
@@ -113,12 +113,12 @@ def test_duplicate_players_are_rejected() -> None:
 
 
 def test_americano_config_cannot_set_round_count() -> None:
-    with pytest.raises(InvalidConfig):
+    with pytest.raises(InvalidConfigError):
         TournamentConfig(Format.AMERICANO, rounds=5)
 
 
 def test_create_americano_rejects_a_mexicano_config() -> None:
-    with pytest.raises(WrongFormat):
+    with pytest.raises(WrongFormatError):
         create_americano(roster(8), TournamentConfig(Format.MEXICANO, rounds=3), seed=1)
 
 

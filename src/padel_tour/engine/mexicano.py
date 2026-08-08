@@ -7,11 +7,17 @@ configured pattern, ``1+4 vs 2+3`` by default.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from random import Random
+from typing import TYPE_CHECKING
 
-from .errors import NoMoreRounds, RoundIncomplete, TournamentFinished, WrongFormat
+from .errors import (
+    InvalidConfigError,
+    NoMoreRoundsError,
+    RoundIncompleteError,
+    TournamentFinishedError,
+    WrongFormatError,
+)
 from .models import (
     PATTERN_INDICES,
     Format,
@@ -25,6 +31,9 @@ from .models import (
 )
 from .roster import validate_roster
 from .standings import ranked_players
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
 
 
 def draw_round(number: int, order: Sequence[PlayerId], pattern: PairingPattern) -> Round:
@@ -50,10 +59,11 @@ def create_mexicano(
 ) -> TournamentState:
     """Start a Mexicano with a random first round. Later rounds come from :func:`next_round`."""
     if config.format is not Format.MEXICANO:
-        raise WrongFormat(f"create_mexicano called with format {config.format}")
+        raise WrongFormatError(f"create_mexicano called with format {config.format}")
 
     roster = validate_roster(players)
-    assert config.rounds is not None  # guaranteed by TournamentConfig
+    if config.rounds is None:  # TournamentConfig guarantees this; narrow it for the reader
+        raise InvalidConfigError("a Mexicano needs a round count")
 
     rng = Random(seed)
     draw_order = tuple(rng.sample(roster, len(roster)))
@@ -78,19 +88,19 @@ def next_round(state: TournamentState) -> TournamentState:
     still playing, and drawing from it would hand out the wrong partners.
     """
     if state.config.format is not Format.MEXICANO:
-        raise WrongFormat("only a Mexicano draws its rounds one at a time")
+        raise WrongFormatError("only a Mexicano draws its rounds one at a time")
     if state.finished:
-        raise TournamentFinished("the tournament is over")
+        raise TournamentFinishedError("the tournament is over")
 
     current = state.current_round
     if current is not None and not current.complete:
         pending = [match.court for match in current.matches if not match.played]
-        raise RoundIncomplete(
+        raise RoundIncompleteError(
             f"round {current.number} is unfinished — no result on court "
             f"{', '.join(str(court) for court in pending)}"
         )
     if len(state.rounds) >= state.total_rounds:
-        raise NoMoreRounds(f"all {state.total_rounds} rounds have been played")
+        raise NoMoreRoundsError(f"all {state.total_rounds} rounds have been played")
 
     order = ranked_players(state)
     drawn = draw_round(len(state.rounds) + 1, order, state.config.pairing_pattern)

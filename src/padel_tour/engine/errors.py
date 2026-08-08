@@ -11,49 +11,49 @@ class PadelEngineError(Exception):
     """Base class for every error the engine raises."""
 
 
-class InvalidConfig(PadelEngineError):
+class InvalidConfigError(PadelEngineError):
     """Tournament configuration is self-contradictory or out of range."""
 
 
-class InvalidPlayerCount(PadelEngineError):
+class InvalidPlayerCountError(PadelEngineError):
     """Player count is not a multiple of four."""
 
 
-class UnsupportedPlayerCount(PadelEngineError):
+class UnsupportedPlayerCountError(PadelEngineError):
     """Player count is a valid multiple of four but no schedule is known for it."""
 
 
-class DuplicatePlayer(PadelEngineError):
+class DuplicatePlayerError(PadelEngineError):
     """The same player id appears twice in the roster."""
 
 
-class UnknownMatch(PadelEngineError):
+class UnknownMatchError(PadelEngineError):
     """No match exists at the requested round/court."""
 
 
-class InvalidScore(PadelEngineError):
+class InvalidScoreError(PadelEngineError):
     """Score does not add up to the configured points per match."""
 
 
-class ResultAlreadyRecorded(PadelEngineError):
+class ResultAlreadyRecordedError(PadelEngineError):
     """That match already has a result."""
 
 
-class RoundIncomplete(PadelEngineError):
+class RoundIncompleteError(PadelEngineError):
     """The current round still has matches without results."""
 
 
-class CannotRerollAfterStart(PadelEngineError):
+class RerollTooLateError(PadelEngineError):
     """Rerolling is only allowed before the first result is recorded."""
 
 
-class TournamentFinished(PadelEngineError):
+class TournamentFinishedError(PadelEngineError):
     """The tournament is over and no longer accepts changes."""
 
 
-class NoMoreRounds(PadelEngineError):
+class NoMoreRoundsError(PadelEngineError):
     """Every planned round has already been generated."""
 
 
-class WrongFormat(PadelEngineError):
+class WrongFormatError(PadelEngineError):
     """The operation does not apply to this tournament format."""

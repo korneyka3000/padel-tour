@@ -8,10 +8,10 @@ import pytest
 from conftest import americano, play_round
 
 from padel_tour.engine import (
-    InvalidScore,
-    ResultAlreadyRecorded,
-    TournamentFinished,
-    UnknownMatch,
+    InvalidScoreError,
+    ResultAlreadyRecordedError,
+    TournamentFinishedError,
+    UnknownMatchError,
     amend_result,
     finish,
     is_played_out,
@@ -22,12 +22,12 @@ from padel_tour.engine import (
 
 
 def test_score_must_add_up_to_the_target() -> None:
-    with pytest.raises(InvalidScore, match="runs to 24 points"):
+    with pytest.raises(InvalidScoreError, match="runs to 24 points"):
         record_result(americano(8), 1, 1, 15, 10)
 
 
 def test_negative_scores_are_rejected() -> None:
-    with pytest.raises(InvalidScore):
+    with pytest.raises(InvalidScoreError):
         record_result(americano(8), 1, 1, -1, 25)
 
 
@@ -38,22 +38,22 @@ def test_shutout_is_a_legal_score() -> None:
 
 def test_custom_point_target() -> None:
     state = americano(8, points=32)
-    with pytest.raises(InvalidScore, match="runs to 32 points"):
+    with pytest.raises(InvalidScoreError, match="runs to 32 points"):
         record_result(state, 1, 1, 14, 10)
     assert record_result(state, 1, 1, 18, 14).started
 
 
 def test_unknown_round_and_court() -> None:
     state = americano(8)
-    with pytest.raises(UnknownMatch, match="round 99"):
+    with pytest.raises(UnknownMatchError, match="round 99"):
         record_result(state, 99, 1, 14, 10)
-    with pytest.raises(UnknownMatch, match="no court 7"):
+    with pytest.raises(UnknownMatchError, match="no court 7"):
         record_result(state, 1, 7, 14, 10)
 
 
 def test_a_result_cannot_be_recorded_twice() -> None:
     state = record_result(americano(8), 1, 1, 14, 10)
-    with pytest.raises(ResultAlreadyRecorded, match="amend_result"):
+    with pytest.raises(ResultAlreadyRecordedError, match="amend_result"):
         record_result(state, 1, 1, 12, 12)
 
 
@@ -70,13 +70,13 @@ def test_amend_fixes_a_typo_and_the_table_follows() -> None:
 
 def test_amend_still_validates_the_score() -> None:
     state = record_result(americano(8), 1, 1, 14, 10)
-    with pytest.raises(InvalidScore):
+    with pytest.raises(InvalidScoreError):
         amend_result(state, 1, 1, 20, 20)
 
 
 def test_recording_is_refused_after_the_tournament_ends() -> None:
     state = finish(americano(8))
-    with pytest.raises(TournamentFinished):
+    with pytest.raises(TournamentFinishedError):
         record_result(state, 1, 1, 14, 10)
 
 

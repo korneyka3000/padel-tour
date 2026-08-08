@@ -69,7 +69,8 @@ def test_each_player_banks_their_own_team_score() -> None:
     assert (rows["A"].points_for, rows["A"].points_against) == (14, 10)
     assert (rows["B"].points_for, rows["B"].points_against) == (14, 10)
     assert (rows["C"].points_for, rows["C"].points_against) == (10, 14)
-    assert rows["A"].wins == 1 and rows["C"].losses == 1
+    assert rows["A"].wins == 1
+    assert rows["C"].losses == 1
 
 
 def test_a_draw_counts_as_a_draw() -> None:

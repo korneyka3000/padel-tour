@@ -16,12 +16,13 @@ cli = [
 [project.scripts]
 padel-tour = "padel_tour.cli:app"
 
+# A backend is needed so `uv sync` installs the project: the src/ layout makes
+# `import padel_tour` resolvable and creates the `padel-tour` entry point.
+# uv_build's default convention is src/<project name with dashes as underscores>,
+# which is exactly this layout, so it needs no configuration.
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/padel_tour"]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
@@ -41,10 +42,74 @@ line-length = 100
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
-# Error messages are Russian and docstrings use real maths notation (−, ×, ∪), so the
-# ambiguous-unicode checks only ever fire on intentional characters.
-ignore = ["RUF001", "RUF002", "RUF003"]
+select = [
+    "A",     # shadowed builtins
+    "ANN",   # missing annotations
+    "ARG",   # unused arguments
+    "ASYNC", # async pitfalls — blocking calls in coroutines, unawaited work
+    "B",     # bugbear
+    "C4",    # comprehensions
+    "C90",   # cyclomatic complexity
+    "DTZ",   # naive datetimes
+    "E",     # pycodestyle errors
+    "ERA",   # commented-out code
+    "F",     # pyflakes
+    "FA",    # future annotations
+    "FBT",   # boolean trap
+    "FURB",  # refurb
+    "G",     # logging format
+    "I",     # import order
+    "ISC",   # implicit string concatenation
+    "LOG",   # logging misuse
+    "N",     # naming
+    "PERF",  # obvious inefficiencies
+    "PIE",
+    "PL",    # pylint
+    "PT",    # pytest style
+    "PTH",   # pathlib over os.path
+    "RET",   # return flow
+    "RSE",   # raise
+    "RUF",
+    "S",     # security (bandit)
+    "SIM",   # simplify
+    "SLF",   # private member access
+    "T20",   # stray print
+    "TC",    # type-checking-only imports
+    "TID",   # tidy imports
+    "TRY",   # exception antipatterns
+    "UP",    # pyupgrade
+    "W",     # pycodestyle warnings
+]
+ignore = [
+    # Error messages carry maths notation (−, ×, ∪) and docs mix scripts, so the
+    # ambiguous-unicode checks only ever fire on intentional characters.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # Single-line implicit concatenation is what the formatter produces; leaving this on
+    # makes lint and format disagree.
+    "ISC001",
+    # Wants exception messages baked into the exception class. Ours are contextual — they
+    # name the round, the court, the score that was wrong — and end up in front of a human.
+    # Templating them into class bodies would make them worse, not better.
+    "TRY003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Draws are reproducible on purpose: `random.Random(seed)` is the design, and a
+# cryptographic generator would defeat it. Anything security-shaped added later (share
+# tokens, invite links) lives outside these paths and stays checked.
+"src/padel_tour/engine/*" = ["S311"]
+"src/padel_tour/cli.py" = ["S311"]
+"tests/**" = [
+    "S101",    # asserts are the point of a test
+    "S311",    # see above
+    "PLR2004", # expected values are magic numbers on purpose
+    "SLF001",  # tests may reach into internals
+]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
 
 [tool.ty.src]
 include = ["src", "tests"]

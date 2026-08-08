@@ -16,6 +16,7 @@ from padel_tour.engine import (
     next_round,
     progression,
     ranked_players,
+    record_result,
     standings,
 )
 
@@ -101,8 +102,6 @@ def test_mexicano_courts_always_hold_adjacent_ranks() -> None:
 @settings(max_examples=25, deadline=None)
 @given(scores=st.lists(st.integers(min_value=0, max_value=24), min_size=14, max_size=14))
 def test_americano_invariants_hold_for_any_scores(scores: list[int]) -> None:
-    from padel_tour.engine import record_result
-
     state = americano(8, seed=1)
     index = 0
     for rnd in state.rounds:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from padel_tour.engine.errors import InvalidPlayerCount, UnsupportedPlayerCount
+from padel_tour.engine.errors import InvalidPlayerCountError, UnsupportedPlayerCountError
 from padel_tour.engine.whist import (
     INF,
     STARTERS,
@@ -43,8 +43,8 @@ def test_every_slot_plays_once_per_round(count: int) -> None:
 def test_infinity_is_the_only_fixed_point() -> None:
     """Rotation must move every finite slot and leave INF alone."""
     design = whist_design(8)
-    first_courts = [game for game in design[0]]
-    second_courts = [game for game in design[1]]
+    first_courts = list(design[0])
+    second_courts = list(design[1])
     assert first_courts != second_courts
     inf_appearances = sum(
         1 for rnd in design for game in rnd for pair in game for slot in pair if slot == INF
@@ -54,14 +54,14 @@ def test_infinity_is_the_only_fixed_point() -> None:
 
 @pytest.mark.parametrize("count", [0, 1, 5, 9, 14, -4])
 def test_bad_player_counts_are_rejected(count: int) -> None:
-    with pytest.raises(InvalidPlayerCount):
+    with pytest.raises(InvalidPlayerCountError):
         require_supported_player_count(count)
 
 
 def test_unknown_but_well_shaped_count_is_a_separate_error() -> None:
     """28 players is a legal shape we simply have no starter for — a different failure."""
     assert 28 not in STARTERS
-    with pytest.raises(UnsupportedPlayerCount):
+    with pytest.raises(UnsupportedPlayerCountError):
         require_supported_player_count(28)
 
 
