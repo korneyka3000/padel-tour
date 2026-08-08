@@ -149,10 +149,11 @@ ignore = [
 ban-relative-imports = "parents"
 
 [tool.ruff.lint.pylint]
-# Recording a score genuinely needs six: session, tournament, round, court and two scores.
-# They are keyword-only, so the call site stays readable and round/court cannot be swapped
-# by accident — which is the mistake PLR0913 is really guarding against.
-max-args = 6
+# Recording a score genuinely needs seven: session, tournament, round, court, two scores
+# and who is doing it. All but the first two are keyword-only, so the call site stays
+# readable and round/court cannot be swapped by accident — which is the mistake PLR0913 is
+# really guarding against.
+max-args = 7
 
 [tool.ty.src]
 include = ["src", "tests"]

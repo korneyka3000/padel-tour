@@ -40,6 +40,11 @@ from .errors import (
     TournamentNotFoundError,
 )
 from .groups import get_group
+from .permissions import (
+    require_can_score,
+    require_member,
+    require_organiser,
+)
 from .views import (
     MatchView,
     RoundView,
@@ -54,6 +59,8 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy.sql.base import ExecutableOption
+
+    from padel_tour.db import Account
 
 _SEED_BITS = 32
 
@@ -160,6 +167,17 @@ def _to_summary(row: Tournament) -> TournamentSummary:
     )
 
 
+def _players_on(row: Tournament, round_no: int, court: int) -> set[uuid.UUID]:
+    """The four player ids on one court, for deciding who may score it."""
+    for round_row in row.rounds:
+        if round_row.number != round_no:
+            continue
+        for match in round_row.matches:
+            if match.court == court:
+                return {match.team_a1, match.team_a2, match.team_b1, match.team_b2}
+    return set()
+
+
 async def _refreshed_view(session: AsyncSession, row: Tournament) -> TournamentView:
     """Flush pending changes, then build a view from what is now stored.
 
@@ -222,8 +240,8 @@ async def start_tournament(
     player_ids: Sequence[uuid.UUID],
     config: TournamentConfig,
     *,
+    actor: Account | None = None,
     seed: int | None = None,
-    organiser_account_id: uuid.UUID | None = None,
 ) -> TournamentView:
     """Draw a new tournament for a group.
 
@@ -231,6 +249,7 @@ async def start_tournament(
     second live tournament would make that screen ambiguous.
     """
     await get_group(session, group_id)
+    await require_member(session, actor, group_id)
 
     if await active_tournament(session, group_id) is not None:
         raise ActiveTournamentExistsError(
@@ -255,7 +274,8 @@ async def start_tournament(
         total_rounds=state.total_rounds,
         seed=chosen_seed,
         status=TournamentStatus.ACTIVE,
-        organiser_account_id=organiser_account_id,
+        # Whoever starts it runs it, and may hand that over later.
+        organiser_account_id=actor.id if actor is not None else None,
     )
     row.entries = _entries_for(state)
     row.rounds = [build_round_row(rnd) for rnd in state.rounds]
@@ -266,9 +286,14 @@ async def start_tournament(
 
 
 async def reroll_tournament(
-    session: AsyncSession, tournament_id: uuid.UUID, *, seed: int | None = None
+    session: AsyncSession,
+    tournament_id: uuid.UUID,
+    *,
+    actor: Account | None = None,
+    seed: int | None = None,
 ) -> TournamentView:
     """Redraw before the first result. The engine refuses once play has started."""
+    await require_organiser(session, actor, tournament_id)
     row = await _load(session, tournament_id)
     state = reroll(load_state(row), seed=seed)
 
@@ -296,9 +321,11 @@ async def record_score(
     court: int,
     score_a: int,
     score_b: int,
+    actor: Account | None = None,
 ) -> TournamentView:
     """Score a match that has not been scored yet."""
     row = await _load(session, tournament_id)
+    await require_can_score(session, actor, tournament_id, _players_on(row, round_no, court))
     state = record_result(load_state(row), round_no, court, score_a, score_b)
     sync_state(row, state)
     return await _refreshed_view(session, row)
@@ -312,24 +339,34 @@ async def amend_score(
     court: int,
     score_a: int,
     score_b: int,
+    actor: Account | None = None,
 ) -> TournamentView:
     """Correct a score entered wrong. Standings and the chart recompute from it."""
     row = await _load(session, tournament_id)
+    await require_can_score(session, actor, tournament_id, _players_on(row, round_no, court))
     state = amend_result(load_state(row), round_no, court, score_a, score_b)
     sync_state(row, state)
     return await _refreshed_view(session, row)
 
 
-async def advance_round(session: AsyncSession, tournament_id: uuid.UUID) -> TournamentView:
+async def advance_round(
+    session: AsyncSession, tournament_id: uuid.UUID, *, actor: Account | None = None
+) -> TournamentView:
     """Draw the next Mexicano round from the current standing."""
     row = await _load(session, tournament_id)
+    # Wider than organising on purpose: the next round follows from the standing and nobody
+    # chooses anything, so whoever enters the last score of a round draws the next one.
+    await require_member(session, actor, row.group_id)
     state = next_round(load_state(row))
     sync_state(row, state)
     return await _refreshed_view(session, row)
 
 
-async def finish_tournament(session: AsyncSession, tournament_id: uuid.UUID) -> TournamentView:
+async def finish_tournament(
+    session: AsyncSession, tournament_id: uuid.UUID, *, actor: Account | None = None
+) -> TournamentView:
     """End the tournament wherever it stands. Allowed at any round."""
+    await require_organiser(session, actor, tournament_id)
     row = await _load(session, tournament_id)
     state = finish(load_state(row))
     sync_state(row, state)

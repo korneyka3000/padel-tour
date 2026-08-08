@@ -49,6 +49,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from padel_tour.db import Account
     from padel_tour.services import TournamentView
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,12 @@ async def _group_for(session: AsyncSession, chat_id: int, title: str) -> uuid.UU
 
     Resolving a chat id to a group is the adapter's job. Below this line nothing knows
     that Telegram exists.
+
+    A group made this way is left **without an owner**, which the service layer reads as
+    open. That is deliberate: the chat is the membership list. Telegram already decides who
+    can see these buttons, and naming one of them owner would only mean the other seven
+    cannot add a player. Groups created on the web do get an owner — there the chat is not
+    there to answer the question.
     """
     existing = await group_for_link(session, PROVIDER_TELEGRAM, str(chat_id))
     if existing is not None:
@@ -88,14 +95,24 @@ async def _group_for(session: AsyncSession, chat_id: int, title: str) -> uuid.UU
     return created.id
 
 
-async def _account_for(session: AsyncSession, user_id: int) -> uuid.UUID:
+async def _account_for(session: AsyncSession, user_id: int) -> Account:
     """The account behind a Telegram user, minted on first sight.
 
     A bot already knows who is pressing, so an unfamiliar id is a first visit rather than
     an error — which is why the bot needs no sign-in flow of its own.
     """
-    account = await ensure_identity(session, PROVIDER_TELEGRAM, str(user_id))
-    return account.id
+    return await ensure_identity(session, PROVIDER_TELEGRAM, str(user_id))
+
+
+async def _actor(session: AsyncSession, message: Message) -> Account:
+    """Who sent this.
+
+    A message with no sender is a channel post. There is nobody to attribute it to, and
+    passing "nobody" downstream would read as *system*, which skips every permission check.
+    """
+    if message.from_user is None:
+        raise ServiceError("Не вижу, от кого сообщение — напишите от своего имени")
+    return await _account_for(session, message.from_user.id)
 
 
 async def _group_name(session: AsyncSession, group_id: uuid.UUID) -> str:
@@ -182,11 +199,12 @@ async def on_add(message: Message, session: AsyncSession, bot: Bot) -> None:
         await message.reply("Кого добавить? Например: <code>/add Аня, Боря</code>")
         return
 
+    actor = await _actor(session, message)
     group_id = await _group_for(session, message.chat.id, message.chat.title or "")
     added, already = [], []
     for name in names:
         try:
-            player = await add_player(session, group_id, name)
+            player = await add_player(session, group_id, name, actor=actor)
         except DuplicatePlayerNameError:
             already.append(name)
         else:
@@ -225,11 +243,11 @@ async def on_press(query: CallbackQuery, session: AsyncSession, bot: Bot) -> Non
 
     chat_id = query.message.chat.id
     message_id = query.message.message_id
-    user_id = query.from_user.id
+    actor = await _account_for(session, query.from_user.id)
     group_id = await _group_for(session, chat_id, query.message.chat.title or "")
 
     try:
-        rendered, tournament_id, note = await _dispatch(session, parsed, chat_id, group_id, user_id)
+        rendered, tournament_id, note = await _dispatch(session, parsed, chat_id, group_id, actor)
     except (PadelEngineError, ServiceError) as exc:
         # These messages are written for people. Show the reason, then put the screen back
         # in step with what is actually stored.
@@ -258,7 +276,7 @@ async def _dispatch(
     press: Callback,
     chat_id: int,
     group_id: uuid.UUID,
-    user_id: int,
+    actor: Account,
 ) -> Outcome:
     """Work out what a press means.
 
@@ -267,10 +285,10 @@ async def _dispatch(
     Each sub-dispatcher returns ``None`` for presses that are not its business.
     """
     if press.action is Action.SHOW:
-        return await _show(session, press.arg, chat_id, group_id, user_id)
+        return await _show(session, press.arg, chat_id, group_id, actor)
 
     for phase in (_setup_action, _scoring_action, _lifecycle_action):
-        outcome = await phase(session, press, chat_id, group_id, user_id)
+        outcome = await phase(session, press, chat_id, group_id, actor)
         if outcome is not None:
             return outcome
     return _NOTHING
@@ -281,7 +299,7 @@ async def _setup_action(
     press: Callback,
     chat_id: int,
     group_id: uuid.UUID,
-    user_id: int,
+    actor: Account,
 ) -> Outcome | None:
     """Assembling a tournament: roster, options, draw."""
     match press.action:
@@ -290,9 +308,9 @@ async def _setup_action(
         case Action.SETTING:
             return _setting(press, chat_id)
         case Action.BEGIN:
-            return await _begin(session, chat_id, group_id, user_id)
+            return await _begin(session, chat_id, group_id, actor)
         case Action.REROLL:
-            return await _reroll(session, group_id, user_id)
+            return await _reroll(session, group_id, actor)
     return None
 
 
@@ -301,17 +319,16 @@ async def _scoring_action(
     press: Callback,
     chat_id: int,
     group_id: uuid.UUID,
-    user_id: int,
+    actor: Account,
 ) -> Outcome | None:
     """Entering a result, in its two steps."""
-    _ = user_id
     match press.action:
         case Action.COURT:
             return await _court(session, group_id, chat_id, int(press.arg))
         case Action.WINNER:
-            return await _winner(session, group_id, chat_id, press.arg)
+            return await _winner(session, group_id, chat_id, press.arg, actor)
         case Action.POINTS:
-            return await _points(session, group_id, chat_id, int(press.arg))
+            return await _points(session, group_id, chat_id, int(press.arg), actor)
         case Action.CANCEL:
             _pending_score.pop(chat_id, None)
             return await _round(session, group_id)
@@ -323,7 +340,7 @@ async def _lifecycle_action(
     press: Callback,
     chat_id: int,
     group_id: uuid.UUID,
-    user_id: int,
+    actor: Account,
 ) -> Outcome | None:
     """Moving a tournament on, or ending it."""
     _ = chat_id
@@ -332,10 +349,10 @@ async def _lifecycle_action(
             view = await _require_active(session, group_id)
             return screens.confirm_finish(view), view.id, ""
         case Action.FINISH:
-            return await _finish(session, group_id, user_id)
+            return await _finish(session, group_id, actor)
         case Action.ADVANCE:
             active = await _require_active(session, group_id)
-            view = await advance_round(session, active.id)
+            view = await advance_round(session, active.id, actor=actor)
             return screens.round_screen(view), view.id, ""
     return None
 
@@ -344,7 +361,7 @@ async def _lifecycle_action(
 
 
 async def _show(
-    session: AsyncSession, raw: str, chat_id: int, group_id: uuid.UUID, user_id: int
+    session: AsyncSession, raw: str, chat_id: int, group_id: uuid.UUID, actor: Account
 ) -> Outcome:
     """Navigate. Unknown screen names come from stale messages and simply do nothing."""
     try:
@@ -352,7 +369,7 @@ async def _show(
     except ValueError:
         return _NOTHING
 
-    lobby = await _show_lobby(session, screen, chat_id, group_id, user_id)
+    lobby = await _show_lobby(session, screen, chat_id, group_id, actor)
     if lobby is not None:
         return lobby
     return await _show_tournament(session, screen, group_id)
@@ -363,7 +380,7 @@ async def _show_lobby(
     screen: Screen,
     chat_id: int,
     group_id: uuid.UUID,
-    user_id: int,
+    actor: Account,
 ) -> Outcome | None:
     """Screens that exist whether or not a tournament is running."""
     match screen:
@@ -371,7 +388,7 @@ async def _show_lobby(
             drafts.clear(chat_id)
             return await _home(session, group_id), None, ""
         case Screen.ROSTER:
-            draft = drafts.get(chat_id) or drafts.start(chat_id, group_id, user_id)
+            draft = drafts.get(chat_id) or drafts.start(chat_id, group_id)
             roster = await list_players(session, group_id)
             return (
                 screens.roster_screen(roster, draft.selected, draft.allowed_counts()),
@@ -381,7 +398,7 @@ async def _show_lobby(
         case Screen.SETUP:
             draft = drafts.get(chat_id)
             if draft is None:
-                return await _show(session, Screen.ROSTER.value, chat_id, group_id, user_id)
+                return await _show(session, Screen.ROSTER.value, chat_id, group_id, actor)
             return _setup_view(draft), None, ""
         case Screen.HISTORY:
             entries = await list_tournaments(session, group_id, limit=HISTORY_LIMIT)
@@ -451,7 +468,9 @@ def _setting(press: Callback, chat_id: int) -> Outcome:
     return _setup_view(draft), None, ""
 
 
-async def _begin(session: AsyncSession, chat_id: int, group_id: uuid.UUID, user_id: int) -> Outcome:
+async def _begin(
+    session: AsyncSession, chat_id: int, group_id: uuid.UUID, actor: Account
+) -> Outcome:
     """Draw the tournament and show it."""
     draft = drafts.get(chat_id)
     if draft is None:
@@ -466,16 +485,15 @@ async def _begin(session: AsyncSession, chat_id: int, group_id: uuid.UUID, user_
         group_id,
         order,
         draft.config(),
-        organiser_account_id=await _account_for(session, user_id),
+        actor=actor,
     )
     drafts.clear(chat_id)
     return screens.draw_screen(view), view.id, "Жеребьёвка готова"
 
 
-async def _reroll(session: AsyncSession, group_id: uuid.UUID, user_id: int) -> Outcome:
+async def _reroll(session: AsyncSession, group_id: uuid.UUID, actor: Account) -> Outcome:
     view = await _require_active(session, group_id)
-    _require_organiser(view, await _account_for(session, user_id))
-    view = await reroll_tournament(session, view.id)
+    view = await reroll_tournament(session, view.id, actor=actor)
     return screens.draw_screen(view), view.id, "Пересдал"
 
 
@@ -499,7 +517,9 @@ async def _court(
     return screens.winner_screen(view, rnd, court_no), view.id, ""
 
 
-async def _winner(session: AsyncSession, group_id: uuid.UUID, chat_id: int, side: str) -> Outcome:
+async def _winner(
+    session: AsyncSession, group_id: uuid.UUID, chat_id: int, side: str, actor: Account
+) -> Outcome:
     view = await _require_active(session, group_id)
     rnd = view.next_unfinished_round
     if rnd is None:
@@ -513,13 +533,15 @@ async def _winner(session: AsyncSession, group_id: uuid.UUID, chat_id: int, side
 
     if side == "draw":
         half = view.points_per_match // 2
-        return await _apply_score(session, group_id, chat_id, court_no, half, half)
+        return await _apply_score(session, group_id, chat_id, court_no, half, half, actor)
 
     _pending_score[chat_id] = (court_no, side)
     return screens.points_screen(view, court_no), view.id, ""
 
 
-async def _points(session: AsyncSession, group_id: uuid.UUID, chat_id: int, value: int) -> Outcome:
+async def _points(
+    session: AsyncSession, group_id: uuid.UUID, chat_id: int, value: int, actor: Account
+) -> Outcome:
     pending = _pending_score.get(chat_id)
     if pending is None:
         return await _round(session, group_id)
@@ -528,7 +550,7 @@ async def _points(session: AsyncSession, group_id: uuid.UUID, chat_id: int, valu
     view = await _require_active(session, group_id)
     loser = view.points_per_match - value
     score_a, score_b = (value, loser) if side == "a" else (loser, value)
-    return await _apply_score(session, group_id, chat_id, court_no, score_a, score_b)
+    return await _apply_score(session, group_id, chat_id, court_no, score_a, score_b, actor)
 
 
 async def _apply_score(
@@ -538,6 +560,7 @@ async def _apply_score(
     court_no: int,
     score_a: int,
     score_b: int,
+    actor: Account,
 ) -> Outcome:
     """Record a score, then move the screen on to whatever comes next."""
     view = await _require_active(session, group_id)
@@ -552,6 +575,7 @@ async def _apply_score(
         court=court_no,
         score_a=score_a,
         score_b=score_b,
+        actor=actor,
     )
     _pending_score.pop(chat_id, None)
 
@@ -560,7 +584,7 @@ async def _apply_score(
 
     # A Mexicano cannot show the next round until it has been drawn from the new standing.
     if view.next_unfinished_round is None and len(view.rounds) < view.total_rounds:
-        view = await advance_round(session, view.id)
+        view = await advance_round(session, view.id, actor=actor)
         return screens.round_screen(view), view.id, "Следующий раунд"
 
     return screens.round_screen(view), view.id, "Записал"
@@ -569,24 +593,7 @@ async def _apply_score(
 # --------------------------------------------------------------------------- finishing
 
 
-def _require_organiser(view: TournamentView, actor_account_id: uuid.UUID | None) -> None:
-    """Anyone may enter a score; only the organiser may end or redraw.
-
-    Entering scores has to stay open — on court the phone belongs to whoever is nearest.
-    Ending a tournament or redrawing the schedule takes the game away from everyone else,
-    so it stays with the person who started it. Proper roles arrive with accounts in M5.
-
-    A tournament started before this rule existed, or from the CLI, has no organiser
-    recorded; those stay open to everyone rather than locked to nobody.
-    """
-    if view.organiser_account_id is None:
-        return
-    if view.organiser_account_id != actor_account_id:
-        raise ServiceError("Это может сделать только тот, кто начал турнир")
-
-
-async def _finish(session: AsyncSession, group_id: uuid.UUID, user_id: int) -> Outcome:
+async def _finish(session: AsyncSession, group_id: uuid.UUID, actor: Account) -> Outcome:
     view = await _require_active(session, group_id)
-    _require_organiser(view, await _account_for(session, user_id))
-    view = await finish_tournament(session, view.id)
+    view = await finish_tournament(session, view.id, actor=actor)
     return screens.table_screen(view), view.id, "Турнир завершён"

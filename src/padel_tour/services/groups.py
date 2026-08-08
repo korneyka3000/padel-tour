@@ -14,12 +14,15 @@ from .errors import (
     GroupNotFoundError,
     PlayerNotFoundError,
 )
+from .permissions import require_owner
 from .views import GroupView, PlayerView
 
 if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from padel_tour.db import Account
 
 
 def _to_group_view(group: Group, player_count: int) -> GroupView:
@@ -125,7 +128,13 @@ async def get_player(session: AsyncSession, player_id: uuid.UUID) -> Player:
     return player
 
 
-async def add_player(session: AsyncSession, group_id: uuid.UUID, name: str) -> PlayerView:
+async def add_player(
+    session: AsyncSession,
+    group_id: uuid.UUID,
+    name: str,
+    *,
+    actor: Account | None = None,
+) -> PlayerView:
     """Add a player to a group.
 
     Re-adding someone who was deactivated reactivates them rather than failing: from the
@@ -133,6 +142,7 @@ async def add_player(session: AsyncSession, group_id: uuid.UUID, name: str) -> P
     here, and it keeps her history attached.
     """
     await get_group(session, group_id)
+    await require_owner(session, actor, group_id)
     clean = name.strip()
 
     existing = await session.scalar(
@@ -163,9 +173,16 @@ async def list_players(
     return [_to_player_view(player) for player in players]
 
 
-async def rename_player(session: AsyncSession, player_id: uuid.UUID, name: str) -> PlayerView:
+async def rename_player(
+    session: AsyncSession,
+    player_id: uuid.UUID,
+    name: str,
+    *,
+    actor: Account | None = None,
+) -> PlayerView:
     """Rename a player. Their tournament history is untouched — it stores ids, not names."""
     player = await get_player(session, player_id)
+    await require_owner(session, actor, player.group_id)
     clean = name.strip()
 
     clash = await session.scalar(
@@ -183,9 +200,12 @@ async def rename_player(session: AsyncSession, player_id: uuid.UUID, name: str) 
     return _to_player_view(player)
 
 
-async def deactivate_player(session: AsyncSession, player_id: uuid.UUID) -> PlayerView:
+async def deactivate_player(
+    session: AsyncSession, player_id: uuid.UUID, *, actor: Account | None = None
+) -> PlayerView:
     """Retire a player from the roster without erasing them from past tournaments."""
     player = await get_player(session, player_id)
+    await require_owner(session, actor, player.group_id)
     player.is_active = False
     await session.flush()
     return _to_player_view(player)

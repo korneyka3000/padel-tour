@@ -142,9 +142,10 @@ async def press(
 
     chat_id = CHAT_ID
     group_id = await handlers._group_for(session, chat_id, "Вторничный падел")
+    actor = await handlers._account_for(session, user_id)
     try:
         rendered, tournament_id, note = await handlers._dispatch(
-            session, parsed, chat_id, group_id, user_id
+            session, parsed, chat_id, group_id, actor
         )
     except Exception as exc:
         await query.answer(str(exc), show_alert=True)

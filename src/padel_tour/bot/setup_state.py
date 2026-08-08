@@ -27,7 +27,6 @@ class Draft:
     """A tournament being assembled in a chat."""
 
     group_id: uuid.UUID
-    started_by: int
     selected: set[uuid.UUID] = field(default_factory=set)
     format: Format = Format.AMERICANO
     points_per_match: int = DEFAULT_POINTS
@@ -72,8 +71,8 @@ class DraftStore:
     def __init__(self) -> None:
         self._drafts: dict[int, Draft] = {}
 
-    def start(self, chat_id: int, group_id: uuid.UUID, user_id: int) -> Draft:
-        draft = Draft(group_id=group_id, started_by=user_id)
+    def start(self, chat_id: int, group_id: uuid.UUID) -> Draft:
+        draft = Draft(group_id=group_id)
         self._drafts[chat_id] = draft
         return draft
 
