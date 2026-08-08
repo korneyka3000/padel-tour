@@ -12,6 +12,24 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+
+    # The suite runs on SQLite locally for speed; here it runs on real Postgres, which is
+    # what catches the places where the two dialects disagree.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: padel
+          POSTGRES_PASSWORD: padel
+          POSTGRES_DB: padel_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U padel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v5
 
@@ -32,5 +50,18 @@ jobs:
       - name: Types
         run: uv run ty check
 
-      - name: Tests
+      # No TEST_DATABASE_URL here on purpose: this run has to be the SQLite one.
+      - name: Tests (SQLite)
         run: uv run pytest
+
+      - name: Tests (Postgres)
+        run: uv run pytest
+        env:
+          TEST_DATABASE_URL: postgresql://padel:padel@localhost:5432/padel_test
+
+      - name: Migrations apply and roll back
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+        env:
+          DATABASE_URL: postgresql://padel:padel@localhost:5432/padel_test

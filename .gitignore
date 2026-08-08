@@ -14,3 +14,5 @@ wheels/
 .ruff_cache/
 .env
 .env.local
+padel.db
+padel.db-journal
