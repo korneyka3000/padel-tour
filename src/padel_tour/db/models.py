@@ -215,9 +215,6 @@ class Group(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_id)
     name: Mapped[str] = mapped_column(String(NAME_LENGTH), unique=True)
-    #: Set once the bot is added to a chat; until then the group is CLI-only.
-    #: Superseded by `links`; removed once the accounts migration has moved the data.
-    telegram_chat_id: Mapped[int | None] = mapped_column(unique=True, default=None)
     #: Who runs the roster and hands out invitations.
     owner_account_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("accounts.id", ondelete="SET NULL"), default=None
@@ -294,9 +291,6 @@ class Tournament(Base):
     #: is what lets a restarted bot pick up the same screen instead of posting a new one.
     screen_chat_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
     screen_message_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
-    #: Telegram id of whoever started this. Superseded by `organiser_account_id`; removed
-    #: once the accounts migration has moved the data.
-    organiser_telegram_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
     #: Who runs this tournament. Per tournament, not per group: last week it was one
     #: person, this week another.
     organiser_account_id: Mapped[uuid.UUID | None] = mapped_column(

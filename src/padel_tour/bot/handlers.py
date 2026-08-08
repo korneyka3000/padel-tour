@@ -17,6 +17,7 @@ from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, Message
 
+from padel_tour.db import PROVIDER_TELEGRAM
 from padel_tour.engine import Format, PadelEngineError, PairingPattern
 from padel_tour.services import (
     ServiceError,
@@ -24,9 +25,11 @@ from padel_tour.services import (
     add_player,
     advance_round,
     create_group,
+    ensure_identity,
     finish_tournament,
     get_tournament,
-    group_by_chat,
+    group_for_link,
+    link_group,
     list_players,
     list_tournaments,
     record_score,
@@ -72,12 +75,27 @@ _NOTHING: Outcome = (None, None, "")
 
 
 async def _group_for(session: AsyncSession, chat_id: int, title: str) -> uuid.UUID:
-    """The group bound to this chat, created the first time the bot is used here."""
-    existing = await group_by_chat(session, chat_id)
+    """The group reachable from this chat, created the first time the bot is used here.
+
+    Resolving a chat id to a group is the adapter's job. Below this line nothing knows
+    that Telegram exists.
+    """
+    existing = await group_for_link(session, PROVIDER_TELEGRAM, str(chat_id))
     if existing is not None:
         return existing.id
-    created = await create_group(session, title or f"Chat {chat_id}", telegram_chat_id=chat_id)
+    created = await create_group(session, title or f"Chat {chat_id}")
+    await link_group(session, created.id, PROVIDER_TELEGRAM, str(chat_id))
     return created.id
+
+
+async def _account_for(session: AsyncSession, user_id: int) -> uuid.UUID:
+    """The account behind a Telegram user, minted on first sight.
+
+    A bot already knows who is pressing, so an unfamiliar id is a first visit rather than
+    an error — which is why the bot needs no sign-in flow of its own.
+    """
+    account = await ensure_identity(session, PROVIDER_TELEGRAM, str(user_id))
+    return account.id
 
 
 async def _group_name(session: AsyncSession, group_id: uuid.UUID) -> str:
@@ -444,7 +462,11 @@ async def _begin(session: AsyncSession, chat_id: int, group_id: uuid.UUID, user_
     roster = await list_players(session, group_id)
     order = [player.id for player in roster if player.id in draft.selected]
     view = await start_tournament(
-        session, group_id, order, draft.config(), organiser_telegram_id=user_id
+        session,
+        group_id,
+        order,
+        draft.config(),
+        organiser_account_id=await _account_for(session, user_id),
     )
     drafts.clear(chat_id)
     return screens.draw_screen(view), view.id, "Жеребьёвка готова"
@@ -452,7 +474,7 @@ async def _begin(session: AsyncSession, chat_id: int, group_id: uuid.UUID, user_
 
 async def _reroll(session: AsyncSession, group_id: uuid.UUID, user_id: int) -> Outcome:
     view = await _require_active(session, group_id)
-    _require_organiser(view, user_id)
+    _require_organiser(view, await _account_for(session, user_id))
     view = await reroll_tournament(session, view.id)
     return screens.draw_screen(view), view.id, "Пересдал"
 
@@ -547,7 +569,7 @@ async def _apply_score(
 # --------------------------------------------------------------------------- finishing
 
 
-def _require_organiser(view: TournamentView, user_id: int) -> None:
+def _require_organiser(view: TournamentView, actor_account_id: uuid.UUID | None) -> None:
     """Anyone may enter a score; only the organiser may end or redraw.
 
     Entering scores has to stay open — on court the phone belongs to whoever is nearest.
@@ -557,14 +579,14 @@ def _require_organiser(view: TournamentView, user_id: int) -> None:
     A tournament started before this rule existed, or from the CLI, has no organiser
     recorded; those stay open to everyone rather than locked to nobody.
     """
-    if view.organiser_telegram_id is None:
+    if view.organiser_account_id is None:
         return
-    if view.organiser_telegram_id != user_id:
+    if view.organiser_account_id != actor_account_id:
         raise ServiceError("Это может сделать только тот, кто начал турнир")
 
 
 async def _finish(session: AsyncSession, group_id: uuid.UUID, user_id: int) -> Outcome:
     view = await _require_active(session, group_id)
-    _require_organiser(view, user_id)
+    _require_organiser(view, await _account_for(session, user_id))
     view = await finish_tournament(session, view.id)
     return screens.table_screen(view), view.id, "Турнир завершён"

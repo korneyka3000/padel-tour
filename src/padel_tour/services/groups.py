@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
 
-from padel_tour.db import Group, Player
+from padel_tour.db import Group, GroupLink, Player
 
 from .errors import (
     DuplicateGroupNameError,
@@ -26,7 +26,7 @@ def _to_group_view(group: Group, player_count: int) -> GroupView:
     return GroupView(
         id=group.id,
         name=group.name,
-        telegram_chat_id=group.telegram_chat_id,
+        owner_account_id=group.owner_account_id,
         player_count=player_count,
     )
 
@@ -49,7 +49,7 @@ async def get_group(session: AsyncSession, group_id: uuid.UUID) -> Group:
 
 
 async def create_group(
-    session: AsyncSession, name: str, *, telegram_chat_id: int | None = None
+    session: AsyncSession, name: str, *, owner_account_id: uuid.UUID | None = None
 ) -> GroupView:
     """Register a new group.
 
@@ -61,7 +61,7 @@ async def create_group(
     if existing is not None:
         raise DuplicateGroupNameError(f"a group called {clean!r} already exists")
 
-    group = Group(name=clean, telegram_chat_id=telegram_chat_id)
+    group = Group(name=clean, owner_account_id=owner_account_id)
     session.add(group)
     await session.flush()
     return _to_group_view(group, player_count=0)
@@ -83,9 +83,19 @@ async def list_groups(session: AsyncSession) -> list[GroupView]:
     return [_to_group_view(group, total) for group, total in rows]
 
 
-async def group_by_chat(session: AsyncSession, telegram_chat_id: int) -> GroupView | None:
-    """Find the group bound to a Telegram chat, if any. Used by the bot in M3."""
-    group = await session.scalar(select(Group).where(Group.telegram_chat_id == telegram_chat_id))
+async def group_for_link(
+    session: AsyncSession, provider: str, external_id: str
+) -> GroupView | None:
+    """The group reachable through an external place — a chat, say.
+
+    Takes a provider rather than naming one, so the service layer stays ignorant of which
+    integrations exist.
+    """
+    group = await session.scalar(
+        select(Group)
+        .join(GroupLink, GroupLink.group_id == Group.id)
+        .where(GroupLink.provider == provider, GroupLink.external_id == external_id)
+    )
     if group is None:
         return None
     total = await session.scalar(
@@ -94,12 +104,12 @@ async def group_by_chat(session: AsyncSession, telegram_chat_id: int) -> GroupVi
     return _to_group_view(group, total or 0)
 
 
-async def bind_group_to_chat(
-    session: AsyncSession, group_id: uuid.UUID, telegram_chat_id: int
+async def link_group(
+    session: AsyncSession, group_id: uuid.UUID, provider: str, external_id: str
 ) -> GroupView:
-    """Attach a group to a Telegram chat so the bot can find it."""
+    """Make a group reachable from an external place."""
     group = await get_group(session, group_id)
-    group.telegram_chat_id = telegram_chat_id
+    session.add(GroupLink(group_id=group_id, provider=provider, external_id=external_id))
     await session.flush()
     total = await session.scalar(
         select(func.count(Player.id)).where(Player.group_id == group.id, Player.is_active)

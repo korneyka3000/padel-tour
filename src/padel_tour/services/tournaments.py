@@ -125,7 +125,7 @@ def _to_view(row: Tournament, state: TournamentState) -> TournamentView:
         finished=state.finished,
         created_at=row.created_at,
         finished_at=row.finished_at,
-        organiser_telegram_id=row.organiser_telegram_id,
+        organiser_account_id=row.organiser_account_id,
         rounds=rounds,
         standings=table,
         progression={to_uuid(player): points for player, points in progression(state).items()},
@@ -223,7 +223,7 @@ async def start_tournament(
     config: TournamentConfig,
     *,
     seed: int | None = None,
-    organiser_telegram_id: int | None = None,
+    organiser_account_id: uuid.UUID | None = None,
 ) -> TournamentView:
     """Draw a new tournament for a group.
 
@@ -255,7 +255,7 @@ async def start_tournament(
         total_rounds=state.total_rounds,
         seed=chosen_seed,
         status=TournamentStatus.ACTIVE,
-        organiser_telegram_id=organiser_telegram_id,
+        organiser_account_id=organiser_account_id,
     )
     row.entries = _entries_for(state)
     row.rounds = [build_round_row(rnd) for rnd in state.rounds]

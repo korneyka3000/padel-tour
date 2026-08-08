@@ -14,6 +14,8 @@ from padel_tour.engine import Format, PairingPattern, TournamentConfig
 from padel_tour.services import add_player, create_group, record_score, start_tournament
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from padel_tour.services import TournamentView
@@ -28,10 +30,10 @@ async def make_tournament(
     rounds: int | None = None,
     points: int = 24,
     pattern: PairingPattern = PairingPattern.CROSSOVER,
-    organiser: int | None = None,
+    organiser: uuid.UUID | None = None,
 ) -> TournamentView:
     """A real tournament with Russian names, as a live chat would have."""
-    group = await create_group(session, "Вторничный падел", telegram_chat_id=-100500)
+    group = await create_group(session, "Вторничный падел")
     players = [(await add_player(session, group.id, name)).id for name in NAMES]
 
     config = (
@@ -42,7 +44,7 @@ async def make_tournament(
         )
     )
     return await start_tournament(
-        session, group.id, players, config, seed=7, organiser_telegram_id=organiser
+        session, group.id, players, config, seed=7, organiser_account_id=organiser
     )
 
 

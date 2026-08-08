@@ -26,7 +26,8 @@ if TYPE_CHECKING:
 class GroupView:
     id: uuid.UUID
     name: str
-    telegram_chat_id: int | None
+    #: Who runs the roster and hands out invitations. Unset for groups made from the CLI.
+    owner_account_id: uuid.UUID | None
     player_count: int
 
 
@@ -99,8 +100,9 @@ class TournamentView:
     finished: bool
     created_at: datetime
     finished_at: datetime | None
-    #: Telegram id of whoever started it, when it was started from a chat.
-    organiser_telegram_id: int | None
+    #: Who runs this tournament. Unset for tournaments started from the CLI, which stay
+    #: open to everyone rather than locked to nobody.
+    organiser_account_id: uuid.UUID | None
     rounds: tuple[RoundView, ...]
     standings: tuple[StandingView, ...]
     progression: dict[uuid.UUID, tuple[ProgressPoint, ...]]

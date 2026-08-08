@@ -8,6 +8,12 @@ Every function takes a session first and **does not commit**: the caller owns th
 transaction, so several calls can be composed into one unit of work.
 """
 
+from .accounts import (
+    account_for_identity,
+    attach_identity,
+    ensure_identity,
+    get_account,
+)
 from .errors import (
     ActiveTournamentExistsError,
     ConflictError,
@@ -23,10 +29,10 @@ from .errors import (
 )
 from .groups import (
     add_player,
-    bind_group_to_chat,
     create_group,
     deactivate_player,
-    group_by_chat,
+    group_for_link,
+    link_group,
     list_groups,
     list_players,
     rename_player,
@@ -73,17 +79,21 @@ __all__ = [
     "TournamentNotFoundError",
     "TournamentSummary",
     "TournamentView",
+    "account_for_identity",
     "active_tournament",
     "add_player",
     "advance_round",
     "amend_score",
-    "bind_group_to_chat",
+    "attach_identity",
     "count_tournaments",
     "create_group",
     "deactivate_player",
+    "ensure_identity",
     "finish_tournament",
+    "get_account",
     "get_tournament",
-    "group_by_chat",
+    "group_for_link",
+    "link_group",
     "list_groups",
     "list_players",
     "list_tournaments",

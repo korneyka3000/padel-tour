@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from conftest import EIGHT_NAMES, americano_config, mexicano_config
+from padel_tour.db import PROVIDER_TELEGRAM
 from padel_tour.engine import (
     Format,
     InvalidScoreError,
@@ -35,7 +36,8 @@ from padel_tour.services import (
     deactivate_player,
     finish_tournament,
     get_tournament,
-    group_by_chat,
+    group_for_link,
+    link_group,
     list_groups,
     list_players,
     list_tournaments,
@@ -88,12 +90,15 @@ async def test_group_name_is_trimmed(session: AsyncSession) -> None:
     assert group.name == "Tuesday"
 
 
-async def test_group_is_findable_by_chat(session: AsyncSession) -> None:
-    created = await create_group(session, "Tuesday", telegram_chat_id=-100500)
-    found = await group_by_chat(session, -100500)
+async def test_a_group_is_findable_through_its_link(session: AsyncSession) -> None:
+    """The bot reaches a group by chat id; the service layer only sees a provider."""
+    created = await create_group(session, "Tuesday")
+    await link_group(session, created.id, PROVIDER_TELEGRAM, "-100500")
+
+    found = await group_for_link(session, PROVIDER_TELEGRAM, "-100500")
     assert found is not None
     assert found.id == created.id
-    assert await group_by_chat(session, -1) is None
+    assert await group_for_link(session, PROVIDER_TELEGRAM, "-1") is None
 
 
 async def test_unknown_group_is_reported(session: AsyncSession) -> None:

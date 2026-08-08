@@ -48,7 +48,7 @@ async def seed_tournament(
     rounds_to_play: int = 0,
 ) -> TournamentView:
     """A group of eight with a tournament, optionally part-played."""
-    group = await create_group(session, "Вторничный падел", telegram_chat_id=-100500)
+    group = await create_group(session, "Вторничный падел")
     players = [(await add_player(session, group.id, name)).id for name in NAMES]
 
     config = (

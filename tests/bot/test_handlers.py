@@ -14,8 +14,14 @@ import pytest
 from conftest import NAMES
 from padel_tour.bot import handlers, screens
 from padel_tour.bot.callbacks import Action, Callback, Screen, plain, points, show, toggle, winner
-from padel_tour.db import Tournament
-from padel_tour.services import active_tournament, add_player, create_group, list_players
+from padel_tour.db import PROVIDER_TELEGRAM, Tournament
+from padel_tour.services import (
+    active_tournament,
+    add_player,
+    create_group,
+    link_group,
+    list_players,
+)
 
 if TYPE_CHECKING:
     import uuid
@@ -172,7 +178,8 @@ def bot() -> FakeBot:
 
 
 async def seeded_group(session: AsyncSession) -> uuid.UUID:
-    group = await create_group(session, "Вторничный падел", telegram_chat_id=CHAT_ID)
+    group = await create_group(session, "Вторничный падел")
+    await link_group(session, group.id, PROVIDER_TELEGRAM, str(CHAT_ID))
     for name in NAMES:
         await add_player(session, group.id, name)
     return group.id
@@ -303,7 +310,8 @@ async def test_a_mexicano_draws_its_next_round_by_itself(
     session: AsyncSession, bot: FakeBot
 ) -> None:
     """Finishing a round should not need a separate 'next round' tap."""
-    group = await create_group(session, "Вторник", telegram_chat_id=CHAT_ID)
+    group = await create_group(session, "Вторник")
+    await link_group(session, group.id, PROVIDER_TELEGRAM, str(CHAT_ID))
     for name in NAMES:
         await add_player(session, group.id, name)
 
