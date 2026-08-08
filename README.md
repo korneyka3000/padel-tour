@@ -22,7 +22,7 @@ uv run padel-tour history      # прошедшие турниры
 uv run padel-tour demo         # оба формата со случайным счётом, без базы
 
 uv run padel-tour-bot poll     # Telegram-бот локально (нужен BOT_TOKEN в .env)
-uv run uvicorn padel_tour.api:app   # HTTP API на :8000
+uv run fastapi dev                  # HTTP API на :8000 с автоперезагрузкой
 
 uv run pytest                  # тесты
 uv run ruff check .            # линт

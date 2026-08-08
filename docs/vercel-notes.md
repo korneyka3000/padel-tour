@@ -40,10 +40,10 @@ Vercel ставит их через **uv**, и `pyproject.toml` для него 
 `padel_tour.api.app` ищется как `padel_tour/api/app.py` в корне и не находится. Поэтому
 точка входа — `api/index.py`, конвенциональное место.
 
-## uvicorn в деплой не едет
+## Сервер в деплой не едет
 
-Vercel сам поднимает ASGI-приложение, свой сервер ему не нужен. `uvicorn` лежит в dev-группе
-и служит только для локального `uv run uvicorn padel_tour.api:app`.
+Vercel сам поднимает ASGI-приложение, свой сервер ему не нужен. `fastapi[standard]` — вместе
+с CLI и uvicorn внутри — лежит в dev-группе и служит только для локального `fastapi dev`.
 
 ## Документация API живёт под `/api`
 

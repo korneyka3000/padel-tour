@@ -23,6 +23,9 @@ dependencies = [
     "typer>=0.15",
 ]
 
+[tool.fastapi]
+entrypoint = "padel_tour.api.app:app"
+
 # No `[tool.vercel] entrypoint` here: it resolves a file path from the project root, which a
 # src/ layout does not satisfy. api/index.py is the conventional location instead.
 
@@ -40,8 +43,9 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    # Vercel serves the app itself; this is only for running it locally.
-    "uvicorn[standard]>=0.34",
+    # The `fastapi dev` / `fastapi run` CLI and the server behind it. Not in the base
+    # dependencies because Vercel serves the app itself and has no use for either.
+    "fastapi[standard]>=0.141",
     "pytest>=8.3",
     "hypothesis>=6.112",
     "ruff>=0.16",
@@ -74,6 +78,7 @@ select = [
     "E",     # pycodestyle errors
     "ERA",   # commented-out code
     "F",     # pyflakes
+    "FAST",  # FastAPI (suggested by the official FastAPI skill)
     "FA",    # future annotations
     "FBT",   # boolean trap
     "FURB",  # refurb

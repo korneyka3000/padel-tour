@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import os
 from functools import lru_cache
-from typing import Any
+from typing import Annotated, Any
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -54,7 +54,7 @@ def _bot_and_dispatcher() -> tuple[Bot, Dispatcher]:
 @router.post("/webhook", include_in_schema=False)
 async def telegram_webhook(
     request: Request,
-    secret: str | None = Header(default=None, alias=SECRET_HEADER),
+    secret: Annotated[str | None, Header(alias=SECRET_HEADER)] = None,
 ) -> dict[str, bool]:
     """Hand one update to the dispatcher.
 
