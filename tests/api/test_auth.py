@@ -10,6 +10,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from conftest import OWNER_EMAIL, seed_tournament, sign_in
+from padel_tour.api.auth import link_base, secure_cookies
+from padel_tour.api.deps import SESSION_COOKIE
 from padel_tour.db import PROVIDER_EMAIL
 from padel_tour.services import (
     account_for_identity,
@@ -20,13 +22,12 @@ from padel_tour.services import (
 )
 
 if TYPE_CHECKING:
+    import pytest
     from httpx import AsyncClient
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from padel_tour.db import Account
     from padel_tour.services.mail import InMemoryMailer
-
-from padel_tour.api.deps import SESSION_COOKIE
 
 
 async def signed_in_account(session: AsyncSession, address: str = OWNER_EMAIL) -> Account:
@@ -283,3 +284,31 @@ async def test_a_signed_in_person_can_start_a_group(
 
 async def test_starting_a_group_needs_an_account(client: AsyncClient) -> None:
     assert (await client.post("/api/groups", json={"name": "Ничья"})).status_code == 401
+
+
+# ------------------------------------------------------------------------------ addresses
+
+
+def test_the_link_falls_back_to_the_platform_domain(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fresh deployment must send working links before anyone configures anything."""
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+    monkeypatch.setenv("VERCEL_PROJECT_PRODUCTION_URL", "yo-padel-tour.vercel.app")
+
+    assert link_base() == "https://yo-padel-tour.vercel.app/auth/enter"
+    assert secure_cookies()
+
+
+def test_a_configured_address_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://padel.example.com/")
+    monkeypatch.setenv("VERCEL_PROJECT_PRODUCTION_URL", "yo-padel-tour.vercel.app")
+
+    assert link_base() == "https://padel.example.com/auth/enter"
+
+
+def test_a_developer_machine_does_not_demand_tls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Secure cookie over plain http is never stored, and the session silently vanishes."""
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+    monkeypatch.delenv("VERCEL_PROJECT_PRODUCTION_URL", raising=False)
+
+    assert link_base() == "http://localhost:5173/auth/enter"
+    assert not secure_cookies()
