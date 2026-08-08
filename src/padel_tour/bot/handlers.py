@@ -33,6 +33,7 @@ from padel_tour.services import (
     list_players,
     list_tournaments,
     record_score,
+    redeem_invite,
     reroll_tournament,
     start_tournament,
 )
@@ -184,10 +185,30 @@ def _setup_view(draft: Draft) -> screens.Rendered:
 
 @router.message(CommandStart())
 async def on_start(message: Message, session: AsyncSession, bot: Bot) -> None:
-    """Bind this chat to a group and show where things stand."""
+    """Bind this chat to a group and show where things stand.
+
+    ``/start <token>`` is how an invitation is accepted in Telegram: the owner shares a
+    ``t.me/bot?start=<token>`` link and Telegram hands the token back here. It is the same
+    token the web accepts, because it invites someone to a *player*, not to a surface.
+    """
+    payload = (message.text or "").partition(" ")[2].strip()
+    if payload:
+        await _accept_invite(session, message, payload)
+        return
+
     title = message.chat.title or (message.from_user.full_name if message.from_user else "")
     group_id = await _group_for(session, message.chat.id, title)
     await _paint(bot, session, message.chat.id, await _current_screen(session, group_id))
+
+
+async def _accept_invite(session: AsyncSession, message: Message, token: str) -> None:
+    """Claim the player an invitation names."""
+    try:
+        player = await redeem_invite(session, token, await _actor(session, message))
+    except ServiceError as exc:
+        await message.reply(str(exc))
+        return
+    await message.reply(f"Готово — теперь вы играете как <b>{player.name}</b>")
 
 
 @router.message(Command("add"))
