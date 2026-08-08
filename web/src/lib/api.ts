@@ -19,6 +19,8 @@ export interface GroupDetail {
   id: string
   name: string
   players: Player[]
+  /** Whether you keep this roster. Controls that would be refused are not shown. */
+  is_owner: boolean
 }
 
 export interface Match {
@@ -101,6 +103,17 @@ export interface PlayerProfile {
   history: TournamentCard[]
 }
 
+export interface Me {
+  id: string
+  display_name: string | null
+  groups: Group[]
+}
+
+export interface Invitation {
+  token: string
+  player: Player
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -112,9 +125,17 @@ export class ApiError extends Error {
 }
 
 /** Answers null for 204 — an idle group is not an error, it is just not playing. */
-async function request<T>(path: string): Promise<T | null> {
+async function request<T>(path: string, body?: unknown): Promise<T | null> {
   const response = await fetch(`/api${path}`, {
-    headers: { Accept: 'application/json' },
+    method: body === undefined ? 'GET' : 'POST',
+    // The session lives in a cookie the script cannot read, so it has to be sent rather
+    // than attached. Same-origin in production; explicit here because the dev server is not.
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
   })
 
   if (response.status === 204) return null
@@ -130,10 +151,10 @@ async function request<T>(path: string): Promise<T | null> {
   return (await response.json()) as T
 }
 
-async function required<T>(path: string): Promise<T> {
-  const body = await request<T>(path)
-  if (body === null) throw new ApiError(204, 'Пусто')
-  return body
+async function required<T>(path: string, body?: unknown): Promise<T> {
+  const answer = await request<T>(path, body)
+  if (answer === null) throw new ApiError(204, 'Пусто')
+  return answer
 }
 
 export const api = {
@@ -143,6 +164,19 @@ export const api = {
   active: (id: string) => request<Tournament>(`/groups/${id}/active`),
   tournament: (id: string) => required<Tournament>(`/tournaments/${id}`),
   player: (id: string) => required<PlayerProfile>(`/players/${id}`),
+
+  me: () => required<Me>('/auth/me'),
+  askForLink: (email: string) => request<unknown>('/auth/magic-link', { email }),
+  enter: (token: string) => required<Me>('/auth/enter', { token }),
+  signOut: () => request<unknown>('/auth/sign-out'),
+
+  invitation: (token: string) => required<Player>(`/invites/${token}`),
+  acceptInvitation: (token: string) => required<Player>('/invites/redeem', { token }),
+  invite: (playerId: string) => required<Invitation>(`/players/${playerId}/invite`),
+
+  createGroup: (name: string) => required<Group>('/groups', { name }),
+  addPlayer: (groupId: string, name: string) =>
+    required<GroupDetail>(`/groups/${groupId}/players`, { name }),
 }
 
 export const FORMAT_LABEL: Record<Format, string> = {

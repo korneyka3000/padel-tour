@@ -35,14 +35,24 @@ router = APIRouter(prefix=f"{API_PREFIX}/auth", tags=["auth"])
 #: How long the cookie lasts, matching the session row behind it.
 SESSION_MAX_AGE = 30 * 24 * 60 * 60
 
-#: Where the link in the email points. The address is ours, so it is configuration rather
-#: than anything a request may set — a caller-supplied base would make this an open redirect
-#: that sends sign-in tokens to whoever asked.
-DEFAULT_LINK_BASE = "http://localhost:5173/auth/enter"
+#: Where the web app runs when nothing says otherwise: the Vite dev server.
+DEFAULT_BASE_URL = "http://localhost:5173"
+
+#: The page a sign-in link lands on.
+ENTER_PATH = "/auth/enter"
+
+
+def base_url() -> str:
+    return os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/") or DEFAULT_BASE_URL
 
 
 def link_base() -> str:
-    return os.environ.get("WEB_BASE_URL", "").strip() or DEFAULT_LINK_BASE
+    """Where the link in the email points.
+
+    Read from configuration rather than from the request. A caller-supplied base would make
+    this an open redirect that mails sign-in tokens to whoever asked for them.
+    """
+    return f"{base_url()}{ENTER_PATH}"
 
 
 def mailer_for(request: Request) -> Mailer:
@@ -53,9 +63,7 @@ def mailer_for(request: Request) -> Mailer:
 
 def secure_cookies() -> bool:
     """Off only where there is no TLS to require: a developer's machine."""
-    return os.environ.get("WEB_BASE_URL", "").startswith("https://") or bool(
-        os.environ.get("VERCEL")
-    )
+    return base_url().startswith("https://")
 
 
 # ----------------------------------------------------------------------------------- wire

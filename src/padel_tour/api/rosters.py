@@ -56,6 +56,7 @@ async def make_player(
         id=group.id,
         name=group.name,
         players=[Player.of(player) for player in roster],
+        is_owner=True,
     )
 
 

@@ -1,12 +1,14 @@
 /** A group: what is being played right now, then everything that came before. */
 
+import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 
 import { Failed, Loading, Note, useAsync } from '../components/Async'
 import { Climb } from '../components/Climb'
 import { CourtGrid } from '../components/Court'
+import { Roster } from '../components/Roster'
 import { Standings } from '../components/Standings'
-import type { GroupDetail, Tournament, TournamentCard } from '../lib/api'
+import type { GroupDetail, Player, Tournament, TournamentCard } from '../lib/api'
 import { FORMAT_LABEL, api, formatDate, plural } from '../lib/api'
 
 interface Loaded {
@@ -17,6 +19,9 @@ interface Loaded {
 
 export function GroupPage() {
   const { id = '' } = useParams()
+  // The roster changes under this page — a player added, an invitation issued — and
+  // reloading the whole group to show one new name would throw away the tournament with it.
+  const [roster, setRoster] = useState<Player[] | null>(null)
   const { data, error, loading } = useAsync<Loaded>(
     async () => {
       const [group, active, archive] = await Promise.all([
@@ -34,6 +39,7 @@ export function GroupPage() {
   if (!data) return null
 
   const { group, active, archive } = data
+  const players = roster ?? group.players
   const past = archive.filter((entry) => entry.id !== active?.id)
   const showing = active?.rounds.find((round) => !round.complete) ?? active?.rounds.at(-1)
 
@@ -41,8 +47,7 @@ export function GroupPage() {
     <>
       <header>
         <p className="eyebrow">
-          {group.players.length}{' '}
-          {plural(group.players.length, 'игрок', 'игрока', 'игроков')}
+          {players.length} {plural(players.length, 'игрок', 'игрока', 'игроков')}
         </p>
         <h1 className="title">{group.name}</h1>
         {active ? (
@@ -97,20 +102,12 @@ export function GroupPage() {
         )}
       </section>
 
-      <section className="section" aria-labelledby="roster-heading">
-        <div className="section-head">
-          <h2 id="roster-heading">Состав</h2>
-        </div>
-        <ul className="roster">
-          {group.players.map((player) => (
-            <li key={player.id}>
-              <Link className="roster-chip" to={`/p/${player.id}`}>
-                {player.name}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <Roster
+        groupId={group.id}
+        players={players}
+        canEdit={group.is_owner}
+        onChange={setRoster}
+      />
     </>
   )
 }

@@ -18,6 +18,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response, status
 from sqlalchemy import text
 
+from padel_tour.db import Account
 from padel_tour.services import (
     active_tournament,
     get_tournament,
@@ -42,6 +43,19 @@ from .schemas import (
 )
 
 router = APIRouter(prefix=API_PREFIX, tags=["read"])
+
+
+def owns(owner_account_id: uuid.UUID | None, actor: Account | Anonymous) -> bool:
+    """Whether the caller keeps this roster.
+
+    A group nobody owns — one made from a Telegram chat — is everybody's, so anyone who can
+    see it may also edit it. That matches what the service layer will actually allow, which
+    is the point: a control that is shown must work.
+    """
+    if isinstance(actor, Anonymous):
+        return False
+    return owner_account_id in (None, actor.id)
+
 
 #: Archive page size. Enough that a group's whole season usually fits in one request.
 DEFAULT_PAGE = 20
@@ -79,6 +93,7 @@ async def read_group(group_id: uuid.UUID, session: Session, actor: CurrentAccoun
         id=group.id,
         name=group.name,
         players=[Player.of(player) for player in roster],
+        is_owner=owns(group.owner_account_id, actor),
     )
 
 

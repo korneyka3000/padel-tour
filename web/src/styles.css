@@ -608,18 +608,7 @@ a.card.visually-hidden {
 }
 
 .back:hover,
-.back.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-:focus-visible {
+.back:focus-visible {
   color: var(--ink);
 }
 
@@ -650,5 +639,157 @@ a.card.visually-hidden {
 @media (min-width: 40rem) {
   .courts {
     grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  }
+}
+
+/* ─────────────────────────────────────────────────────────── identity */
+
+/* A single line above everything, so "who am I here" never needs looking for. */
+.topbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.5rem;
+}
+
+.brand {
+  font-family: var(--display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.brand span {
+  color: var(--sign);
+}
+
+/* Reads as a link because it does what a link does; it is a button because it acts. */
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: color 0.18s var(--ease);
+}
+
+.link-button:hover,
+.link-button:focus-visible {
+  color: var(--glass);
+}
+
+/* ─────────────────────────────────────────────────────────── forms */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.9rem;
+  max-width: 24rem;
+  margin-top: 1.25rem;
+}
+
+.field {
+  display: block;
+  width: 100%;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.4rem;
+}
+
+.field-input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: color-mix(in oklab, var(--court) 30%, transparent);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  transition: border-color 0.18s var(--ease);
+}
+
+.field-input::placeholder {
+  color: var(--ink-faint);
+}
+
+.field-input:hover {
+  border-color: var(--edge-strong);
+}
+
+/* An invitation is meant to be copied out, not typed into. */
+.field-copy {
+  font-size: 0.75rem;
+  padding: 0.3rem 0.5rem;
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+
+.field-error {
+  color: var(--sign);
+  font-size: 0.85rem;
+}
+
+/* The one filled control on the page: the thing to press. */
+.button {
+  display: inline-block;
+  padding: 0.6rem 1.1rem;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--night);
+  background: var(--glass);
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    background 0.18s var(--ease),
+    transform 0.18s var(--ease);
+}
+
+.button:hover:not(:disabled) {
+  background: var(--line);
+  transform: translateY(-1px);
+}
+
+.button:disabled {
+  background: var(--edge);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.aside {
+  margin-top: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+}
+
+.roster-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (min-width: 32rem) {
+  .form-inline {
+    flex-direction: row;
+    align-items: flex-end;
+    max-width: 32rem;
+  }
+
+  .form-inline .field-error {
+    flex-basis: 100%;
   }
 }

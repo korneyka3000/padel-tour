@@ -47,6 +47,10 @@ class GroupDetail(BaseModel):
     id: uuid.UUID
     name: str
     players: list[Player]
+    is_owner: bool = Field(
+        default=False,
+        description="Whether the caller keeps this roster. Hides controls that would 403.",
+    )
 
 
 class Match(BaseModel):
