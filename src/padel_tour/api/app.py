@@ -18,7 +18,7 @@ from padel_tour.engine import PadelEngineError
 from padel_tour.services import ConflictError, NotFoundError, ServiceError
 
 from .deps import dispose_engine
-from .routes import router
+from .routes import API_PREFIX, router
 from .telegram import router as telegram_router
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,15 @@ def create_app() -> FastAPI:
         description="Americano and Mexicano tournaments: standings, charts, history.",
         version="0.1.0",
         lifespan=lifespan,
+        # Under /api on purpose. Everything outside /api is rewritten to the web app's
+        # index.html in production, so docs at their default paths answer 200 with a React
+        # page — reachable, wrong, and quiet about it.
+        docs_url=f"{API_PREFIX}/docs",
+        redoc_url=f"{API_PREFIX}/redoc",
+        openapi_url=f"{API_PREFIX}/openapi.json",
+        # No OAuth anywhere in this API, so the route Swagger UI would bounce a login
+        # through has nothing to do. None removes it rather than parking it somewhere.
+        swagger_ui_oauth2_redirect_url=None,
     )
 
     # The web app is served from the same deployment, so same-origin covers production.

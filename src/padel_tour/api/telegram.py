@@ -26,10 +26,11 @@ from padel_tour.bot.handlers import router as bot_router
 from padel_tour.bot.middleware import SessionMiddleware
 
 from .deps import session_factory
+from .routes import API_PREFIX
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/telegram", tags=["telegram"])
+router = APIRouter(prefix=f"{API_PREFIX}/telegram", tags=["telegram"])
 
 #: Telegram echoes this back in a header on every webhook call.
 SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"  # noqa: S105 - a header name

@@ -32,7 +32,11 @@ from .schemas import (
     TournamentCard,
 )
 
-router = APIRouter(prefix="/api")
+#: Everything the API serves lives under this prefix. In production it is also what tells
+#: the deployment to route a request to the function rather than to the web app.
+API_PREFIX = "/api"
+
+router = APIRouter(prefix=API_PREFIX)
 
 #: Archive page size. Enough that a group's whole season usually fits in one request.
 DEFAULT_PAGE = 20

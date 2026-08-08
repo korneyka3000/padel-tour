@@ -216,8 +216,18 @@ async def test_the_api_never_leaks_engine_internals(
     assert "seed" not in body
 
 
-async def test_the_schema_is_published(client: AsyncClient) -> None:
-    body = (await client.get("/openapi.json")).json()
+async def test_the_schema_and_docs_live_under_the_api_prefix(client: AsyncClient) -> None:
+    """Anything outside /api is rewritten to the web app in production.
+
+    At their default paths the docs answered 200 with a React page: reachable, wrong, and
+    quiet about it. These assertions are the only thing standing between us and that.
+    """
+    for path in ("/api/docs", "/api/redoc"):
+        assert (await client.get(path)).status_code == 200, path
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert (await client.get(path)).status_code == 404, path
+
+    body = (await client.get("/api/openapi.json")).json()
     paths = set(body["paths"])
     assert "/api/tournaments/{tournament_id}" in paths
     # The webhook is machinery, not a public endpoint.
