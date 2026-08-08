@@ -9,7 +9,6 @@ from __future__ import annotations
 from random import Random
 
 from conftest import americano, play_round, roster
-
 from padel_tour.engine import (
     Format,
     Match,

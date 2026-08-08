@@ -5,8 +5,8 @@ from __future__ import annotations
 from random import Random
 
 import pytest
-from conftest import americano, opponent_counts, partner_counts, roster
 
+from conftest import americano, opponent_counts, partner_counts, roster
 from padel_tour.engine import (
     DuplicatePlayerError,
     Format,

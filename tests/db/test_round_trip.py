@@ -10,8 +10,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from conftest import americano_config, mexicano_config
 
+from conftest import americano_config, mexicano_config
 from padel_tour.engine import Format, PairingPattern, TournamentConfig, standings
 from padel_tour.services import (
     active_tournament,

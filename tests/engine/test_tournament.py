@@ -5,8 +5,8 @@ from __future__ import annotations
 from random import Random
 
 import pytest
-from conftest import americano, play_round
 
+from conftest import americano, play_round
 from padel_tour.engine import (
     InvalidScoreError,
     ResultAlreadyRecordedError,

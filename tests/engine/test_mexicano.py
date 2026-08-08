@@ -6,8 +6,8 @@ from dataclasses import replace
 from random import Random
 
 import pytest
-from conftest import americano, mexicano, play_round, roster
 
+from conftest import americano, mexicano, play_round, roster
 from padel_tour.engine import (
     Format,
     InvalidConfigError,

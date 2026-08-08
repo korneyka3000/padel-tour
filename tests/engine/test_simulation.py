@@ -5,10 +5,10 @@ from __future__ import annotations
 from random import Random
 
 import pytest
-from conftest import americano, mexicano, partner_counts, play_round
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from conftest import americano, mexicano, partner_counts, play_round
 from padel_tour.engine import (
     PairingPattern,
     TournamentState,

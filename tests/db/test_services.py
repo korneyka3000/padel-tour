@@ -10,8 +10,8 @@ import uuid
 from typing import TYPE_CHECKING
 
 import pytest
-from conftest import EIGHT_NAMES, americano_config, mexicano_config
 
+from conftest import EIGHT_NAMES, americano_config, mexicano_config
 from padel_tour.engine import (
     Format,
     InvalidScoreError,
