@@ -18,7 +18,13 @@ from padel_tour.db import Base, create_engine, database_url
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # ``disable_existing_loggers`` defaults to True, and Alembic's own template leaves it
+    # there. It means every logger created before this line goes silent — which is every
+    # ``padel_tour.*`` logger, because importing the models above is what created them.
+    # In a test run that swallows later assertions about log output; running migrations
+    # in-process it would swallow the application's own warnings, including the one saying
+    # a sign-in link went to the log instead of an inbox.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

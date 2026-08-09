@@ -11,6 +11,7 @@ what is tested is what will actually run.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -204,3 +205,21 @@ async def test_downgrade_puts_the_data_back(
 
     assert chat == CHAT_ID
     assert organiser == ORGANISER_TG
+
+
+@pytest.mark.usefixtures("migrated_engine")
+async def test_running_a_migration_does_not_silence_the_application() -> None:
+    """Alembic configures logging, and its default takes the application's loggers with it.
+
+    ``fileConfig`` disables every logger that already exists unless told otherwise, and by
+    the time ``migrations/env.py`` runs it, importing the models has created all of ours.
+    The damage outlives the migration: in a test run it swallows later assertions about log
+    output, and in a process that migrates before serving it would swallow the warning that
+    says a sign-in link went to the log instead of an inbox.
+    """
+    logger = logging.getLogger("padel_tour.services.mail")
+    assert not logger.disabled
+
+    await migrate_to(ACCOUNTS_REVISION)
+
+    assert not logger.disabled
