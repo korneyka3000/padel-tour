@@ -19,6 +19,11 @@ dependencies = [
     "asyncer>=0.0.18",
     "asyncpg>=0.30",
     "fastapi>=0.141",
+    # Not for pydantic itself — fastapi brings that — but for the extra behind EmailStr.
+    # Without it the API imports fine in development, where a dev dependency happens to
+    # pull email-validator in, and dies on import in production, which installs runtime
+    # dependencies only. It did exactly that once.
+    "pydantic[email]>=2.10",
     "python-dotenv>=1.0",
     "sqlalchemy[asyncio]>=2.0.36",
     "typer>=0.15",
