@@ -11,9 +11,10 @@ from typing import TYPE_CHECKING
 
 from conftest import OWNER_EMAIL, seed_tournament, sign_in
 from padel_tour.api.auth import link_base, secure_cookies
-from padel_tour.api.deps import SESSION_COOKIE
+from padel_tour.api.deps import SESSION_COOKIE, current_account
 from padel_tour.db import PROVIDER_EMAIL
 from padel_tour.services import (
+    ANONYMOUS,
     account_for_identity,
     add_player,
     create_group,
@@ -312,3 +313,12 @@ def test_a_developer_machine_does_not_demand_tls(monkeypatch: pytest.MonkeyPatch
 
     assert link_base() == "http://localhost:5173/auth/enter"
     assert not secure_cookies()
+
+
+async def test_no_cookie_resolves_to_anonymous_not_none(session: AsyncSession) -> None:
+    """Pinned at the source, not just through HTTP.
+
+    ``None`` reaches the service layer as *system*. This dependency must never produce one.
+    """
+    assert await current_account(session, None) is ANONYMOUS
+    assert await current_account(session, "not-a-real-session") is ANONYMOUS
