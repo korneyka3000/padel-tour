@@ -41,7 +41,7 @@ from padel_tour.services.errors import DuplicatePlayerNameError
 from padel_tour.services.groups import get_group
 
 from . import screens
-from .callbacks import Action, Callback, Screen, parse_player_id
+from .callbacks import Action, Callback, Screen, parse_number, parse_player_id
 from .screen_store import remember_screen, show_screen
 from .setup_state import Draft, DraftStore
 
@@ -58,10 +58,13 @@ logger = logging.getLogger(__name__)
 router = Router(name="padel")
 drafts = DraftStore()
 
-#: Where a pending score sits between "who won" and "how many", keyed by chat. Two people
-#: scoring different courts at the same second would collide; in a group standing around one
-#: court that is not a real scenario, and the second entry simply replaces the first.
-_pending_score: dict[int, tuple[int, str]] = {}
+#: Where a pending score sits between "who won" and "how many", keyed by chat *and person*.
+#: Both halves matter. The chat, because one account may play in several groups; the person,
+#: because a tournament runs on more than one court and the phones nearest each of them
+#: belong to different people. Keyed by chat alone, whoever pressed a court button second
+#: would silently steal the first person's match, and the score would land where nobody was
+#: watching.
+_pending_score: dict[tuple[int, uuid.UUID], tuple[int, str]] = {}
 
 #: How many past tournaments the history screen shows.
 HISTORY_LIMIT = 10
@@ -344,14 +347,14 @@ async def _scoring_action(
 ) -> Outcome | None:
     """Entering a result, in its two steps."""
     match press.action:
-        case Action.COURT:
-            return await _court(session, group_id, chat_id, int(press.arg))
+        case Action.COURT if (court_no := parse_number(press.arg)) is not None:
+            return await _court(session, group_id, chat_id, court_no, actor)
         case Action.WINNER:
             return await _winner(session, group_id, chat_id, press.arg, actor)
-        case Action.POINTS:
-            return await _points(session, group_id, chat_id, int(press.arg), actor)
+        case Action.POINTS if (value := parse_number(press.arg)) is not None:
+            return await _points(session, group_id, chat_id, value, actor)
         case Action.CANCEL:
-            _pending_score.pop(chat_id, None)
+            _pending_score.pop((chat_id, actor.id), None)
             return await _round(session, group_id)
     return None
 
@@ -475,8 +478,8 @@ def _setting(press: Callback, chat_id: int) -> Outcome:
             draft.format = Format(press.extra)
             # Americano schedules only certain player counts, so a switch can invalidate a
             # selection that was fine a moment ago. The roster screen says so plainly.
-        case "pts":
-            draft.points_per_match = int(press.extra)
+        case "pts" if (target := parse_number(press.extra)) is not None:
+            draft.points_per_match = target
         case "pat":
             draft.pairing_pattern = PairingPattern(press.extra)
         case "rnd":
@@ -522,7 +525,7 @@ async def _reroll(session: AsyncSession, group_id: uuid.UUID, actor: Account) ->
 
 
 async def _court(
-    session: AsyncSession, group_id: uuid.UUID, chat_id: int, court_no: int
+    session: AsyncSession, group_id: uuid.UUID, chat_id: int, court_no: int, actor: Account
 ) -> Outcome:
     """Step one: which court are we scoring.
 
@@ -534,7 +537,11 @@ async def _court(
     rnd = view.next_unfinished_round
     if rnd is None:
         return screens.round_screen(view), view.id, ""
-    _pending_score[chat_id] = (court_no, "")
+    if not any(match.court == court_no for match in rnd.matches):
+        # Twelve players make three courts, eight make two, and the old message is still in
+        # the chat with a button for the third. Nothing is wrong here worth an alert.
+        return screens.round_screen(view), view.id, ""
+    _pending_score[chat_id, actor.id] = (court_no, "")
     return screens.winner_screen(view, rnd, court_no), view.id, ""
 
 
@@ -546,7 +553,7 @@ async def _winner(
     if rnd is None:
         return screens.round_screen(view), view.id, ""
 
-    pending = _pending_score.get(chat_id)
+    pending = _pending_score.get((chat_id, actor.id))
     if pending is None:
         # The court button is what selects a match; without it we would be guessing.
         return screens.round_screen(view), view.id, ""
@@ -556,19 +563,30 @@ async def _winner(
         half = view.points_per_match // 2
         return await _apply_score(session, group_id, chat_id, court_no, half, half, actor)
 
-    _pending_score[chat_id] = (court_no, side)
+    _pending_score[chat_id, actor.id] = (court_no, side)
     return screens.points_screen(view, court_no), view.id, ""
 
 
 async def _points(
     session: AsyncSession, group_id: uuid.UUID, chat_id: int, value: int, actor: Account
 ) -> Outcome:
-    pending = _pending_score.get(chat_id)
+    pending = _pending_score.get((chat_id, actor.id))
     if pending is None:
         return await _round(session, group_id)
 
     court_no, side = pending
     view = await _require_active(session, group_id)
+
+    # The keyboard only offers scores that win, so a number outside that range arrived from
+    # somewhere else — an older message, a shorter match, a replayed press. Deriving the
+    # loser's score from it anyway would file the declared winner as the loser and look like
+    # a perfectly ordinary result. Checked here rather than in the engine: the engine sees
+    # two numbers that add up correctly and has no way to know which side was called out.
+    lowest = view.points_per_match // 2 + 1
+    if not lowest <= value <= view.points_per_match:
+        note = f"Счёт победителя — от {lowest} до {view.points_per_match}"
+        return screens.points_screen(view, court_no), view.id, note
+
     loser = view.points_per_match - value
     score_a, score_b = (value, loser) if side == "a" else (loser, value)
     return await _apply_score(session, group_id, chat_id, court_no, score_a, score_b, actor)
@@ -598,7 +616,7 @@ async def _apply_score(
         score_b=score_b,
         actor=actor,
     )
-    _pending_score.pop(chat_id, None)
+    _pending_score.pop((chat_id, actor.id), None)
 
     if view.finished:
         return screens.table_screen(view), view.id, "Турнир завершён"

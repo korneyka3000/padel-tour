@@ -137,3 +137,18 @@ def parse_player_id(arg: str) -> uuid.UUID | None:
         return uuid.UUID(hex=arg)
     except ValueError:
         return None
+
+
+def parse_number(arg: str) -> int | None:
+    """Read a numeric argument back out of callback data.
+
+    Same contract as :func:`parse_player_id`, and for the same reason. Every button that
+    carries a number puts one there, so anything else did not come from a keyboard we drew.
+    Bare ``int()`` would raise ``ValueError``, which no handler catches and nothing above
+    them turns into a reply — under a webhook that is a 500 for a press that should simply
+    do nothing.
+    """
+    try:
+        return int(arg)
+    except ValueError:
+        return None

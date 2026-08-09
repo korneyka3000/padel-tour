@@ -170,7 +170,7 @@ async def press(
 def _clean_drafts() -> None:
     """Drafts are module-level state; one test must not leak into the next."""
     handlers.drafts.clear(CHAT_ID)
-    handlers._pending_score.pop(CHAT_ID, None)
+    handlers._pending_score.clear()
 
 
 @pytest.fixture
@@ -362,7 +362,114 @@ async def test_anyone_may_enter_a_score(session: AsyncSession, bot: FakeBot) -> 
     assert view.rounds[0].matches[0].played
 
 
+async def test_two_people_scoring_at_once_do_not_cross_wires(
+    session: AsyncSession, bot: FakeBot
+) -> None:
+    """Two courts, two phones, one chat.
+
+    The court is chosen in one press and used in the next, so where it waits decides whose
+    match gets the score. Keyed by chat, the second person's choice overwrites the first
+    person's, and the first person's score lands on a match they never watched.
+    """
+    group_id = await start_from_buttons(session, bot, user_id=ORGANISER)
+
+    await press(session, bot, Callback(Action.COURT, "1").pack(), user_id=ORGANISER)
+    await press(session, bot, Callback(Action.COURT, "2").pack(), user_id=BYSTANDER)
+
+    await press(session, bot, winner("a"), user_id=ORGANISER)
+    await press(session, bot, points(20), user_id=ORGANISER)
+
+    view = await active_tournament(session, group_id)
+    assert view is not None
+    courts = {match.court: match for match in view.rounds[0].matches}
+    assert (courts[1].score_a, courts[1].score_b) == (20, 4)
+    assert not courts[2].played
+
+
 # --------------------------------------------------------------------------- errors
+
+
+async def test_a_score_that_cannot_win_is_refused(session: AsyncSession, bot: FakeBot) -> None:
+    """The winner's score has to be a winning one.
+
+    The keyboard only ever offers scores above half the target, so this press cannot come
+    from the screen in front of you — but callback data is whatever arrives, and older
+    messages from a shorter match are still sitting in the chat with their own buttons.
+    Trusting the number would record the declared winner as having lost 10:14.
+    """
+    group_id = await start_from_buttons(session, bot)
+    await press(session, bot, Callback(Action.COURT, "1").pack())
+    await press(session, bot, winner("a"))
+
+    await press(session, bot, points(10))
+
+    view = await active_tournament(session, group_id)
+    assert view is not None
+    assert not view.rounds[0].matches[0].played
+
+
+async def test_a_score_above_the_target_is_refused(session: AsyncSession, bot: FakeBot) -> None:
+    """The other end of the same hole: 30 out of 24 would leave the loser on minus six."""
+    group_id = await start_from_buttons(session, bot)
+    await press(session, bot, Callback(Action.COURT, "1").pack())
+    await press(session, bot, winner("a"))
+
+    await press(session, bot, points(30))
+
+    view = await active_tournament(session, group_id)
+    assert view is not None
+    assert not view.rounds[0].matches[0].played
+
+
+async def test_a_court_outside_this_round_is_refused(session: AsyncSession, bot: FakeBot) -> None:
+    """Eight players make two courts. A button for a third comes from another tournament."""
+    await start_from_buttons(session, bot)
+
+    query = await press(session, bot, Callback(Action.COURT, "9").pack())
+
+    # Not an alert: an alert here would be an internal failure leaking out as a message,
+    # because nothing in the flow raises on purpose for a court that is simply not there.
+    assert not query.answers[-1].alert
+    assert "Кто выиграл" not in bot.edited[-1].text
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        Callback(Action.COURT, "one").pack(),
+        Callback(Action.POINTS, "").pack(),
+    ],
+)
+async def test_a_scoring_press_carrying_nonsense_does_nothing(
+    session: AsyncSession, bot: FakeBot, data: str
+) -> None:
+    """Nothing we draw sends these, but callback data is whatever reaches the endpoint.
+
+    ``int()`` on it raises, no handler catches ``ValueError``, and nothing above them turns
+    an exception into a reply — so under a webhook the press answers 500 instead of nothing.
+    """
+    await start_from_buttons(session, bot)
+
+    query = await press(session, bot, data)
+
+    assert not query.answers[-1].alert
+
+
+async def test_a_setup_press_carrying_nonsense_does_nothing(
+    session: AsyncSession, bot: FakeBot
+) -> None:
+    """The same hole on the setup screen. Pressed while a draft exists, or it proves nothing."""
+    group_id = await seeded_group(session)
+    await press(session, bot, show(Screen.ROSTER))
+    for player in await list_players(session, group_id):
+        await press(session, bot, toggle(player.id))
+    await press(session, bot, show(Screen.SETUP))
+
+    query = await press(session, bot, Callback(Action.SETTING, "pts", "lots").pack())
+
+    assert not query.answers[-1].alert
+    # The bullet marks the chosen target: still 24, so nonsense changed nothing.
+    assert "• до 24" in bot.edited[-1].buttons
 
 
 async def test_an_error_is_shown_as_an_alert_not_a_crash(
