@@ -60,10 +60,17 @@ class LoggingMailer:
 
     What a fresh checkout gets. Local development should never be blocked on having a mail
     account, and a sign-in link in the terminal is perfectly usable.
+
+    Logged at warning level rather than info, and that is the whole point of the level
+    choice: nothing configures the root logger in a serverless function or under uvicorn's
+    default settings, so an info line goes nowhere. A deployment with no mail server would
+    then swallow every sign-in link in silence — the form would answer "check your inbox"
+    and nothing would ever arrive. Warning reaches stderr on its own.
     """
 
     async def send(self, to: str, subject: str, body: str) -> None:
-        logger.info("mail to %s — %s\n%s", to, subject, body)
+        logger.warning("SMTP is not configured — mail to %s went to the log", to)
+        logger.warning("%s\n%s", subject, body)
 
 
 @dataclass(frozen=True, slots=True)

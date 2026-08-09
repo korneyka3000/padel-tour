@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from padel_tour.services.mail import (
@@ -51,3 +52,14 @@ def test_the_sender_falls_back_to_the_login(monkeypatch: pytest.MonkeyPatch) -> 
     mailer = mailer_from_env()
     assert isinstance(mailer, SmtpMailer)
     assert mailer.config.sender == "bot@example.com"
+
+
+async def test_the_fallback_mailer_is_loud_enough_to_be_seen(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Info goes nowhere under uvicorn's defaults, and a silent sign-in link is a dead end."""
+    with caplog.at_level(logging.WARNING):
+        await LoggingMailer().send("anya@example.com", "Вход", "https://example.com?token=abc")
+
+    assert "anya@example.com" in caplog.text
+    assert "token=abc" in caplog.text
