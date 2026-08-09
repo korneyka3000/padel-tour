@@ -58,6 +58,19 @@ export function GroupPage() {
         ) : (
           <p className="subtitle">Сейчас никто не играет</p>
         )}
+        {group.is_owner && (
+          <div className="actions">
+            {active ? (
+              <Link className="button" to={`/t/${active.id}`}>
+                К турниру
+              </Link>
+            ) : (
+              <Link className="button" to={`/g/${group.id}/play`}>
+                Собрать турнир
+              </Link>
+            )}
+          </div>
+        )}
       </header>
 
       {active && showing && (
@@ -76,7 +89,9 @@ export function GroupPage() {
 
         {past.length === 0 ? (
           <Note title="Пока ни одного">
-            Соберите турнир в телеграме — он появится здесь.
+            {group.is_owner
+              ? 'Соберите первый — он появится здесь.'
+              : 'Как только кто-нибудь соберёт турнир, он появится здесь.'}
           </Note>
         ) : (
           <div className="cards">

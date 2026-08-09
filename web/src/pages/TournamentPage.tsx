@@ -1,48 +1,168 @@
-/** One tournament: where play has got to, the table, and the climb. */
+/** One tournament: where play has got to, the table, the climb — and running it. */
 
+import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 
+import { Failed, Loading, useAsync } from '../components/Async'
 import { Climb } from '../components/Climb'
-import { Failed, Loading } from '../components/Async'
-import { useAsync } from '../components/Async'
 import { CourtGrid } from '../components/Court'
 import { Standings } from '../components/Standings'
-import { FORMAT_LABEL, api, formatDate, plural } from '../lib/api'
+import type { Scoring } from '../components/Court'
+import type { Tournament } from '../lib/api'
+import { FORMAT_LABEL, api, canScore, formatDate, plural } from '../lib/api'
 
 export function TournamentPage() {
   const { id = '' } = useParams()
   const { data, error, loading } = useAsync(() => api.tournament(id), [id])
+  // Every write answers with the whole tournament, so the screen is redrawn from the
+  // server's own copy rather than from a guess about what the write changed.
+  const [live, setLive] = useState<Tournament | null>(null)
+  // Which round is on screen. Null means "wherever play has got to", which is what someone
+  // standing on court wants; a number means they have stepped back to correct something.
+  const [looking, setLooking] = useState<number | null>(null)
 
   if (loading) return <Loading />
   if (error) return <Failed message={error} />
   if (!data) return null
 
-  const showing = data.rounds.find((round) => !round.complete) ?? data.rounds.at(-1)
-  const players = data.standings.length
+  const tournament = live ?? data
+  // Where play has got to, unless the reader has stepped back to fix something.
+  const current = tournament.rounds.findIndex((round) => !round.complete)
+  const at = looking ?? (current === -1 ? tournament.rounds.length - 1 : current)
+  const showing = tournament.rounds[at]
+  const players = tournament.standings.length
+
+  const scoring: Scoring | undefined =
+    tournament.finished || !showing
+      ? undefined
+      : {
+          points: tournament.points_per_match,
+          can: (match) => canScore(tournament.viewer, match),
+          submit: async (court, a, b) => {
+            setLive(await api.putScore(tournament.id, showing.number, court, a, b))
+          },
+        }
 
   return (
     <>
-      <Link className="back" to={`/g/${data.group_id}`}>
+      <Link className="back" to={`/g/${tournament.group_id}`}>
         ← К группе
       </Link>
 
       <header>
         <p className="eyebrow">
-          {data.finished ? 'Завершён' : 'Идёт сейчас'} · {formatDate(data.created_at)}
+          {tournament.finished ? 'Завершён' : 'Идёт сейчас'} ·{' '}
+          {formatDate(tournament.created_at)}
         </p>
-        <h1 className="title">{FORMAT_LABEL[data.format]}</h1>
+        <h1 className="title">{FORMAT_LABEL[tournament.format]}</h1>
         <p className="subtitle">
           {players} {plural(players, 'игрок', 'игрока', 'игроков')} · матч до{' '}
-          {data.points_per_match} · {data.total_rounds}{' '}
-          {plural(data.total_rounds, 'раунд', 'раунда', 'раундов')}
+          {tournament.points_per_match} · {tournament.total_rounds}{' '}
+          {plural(tournament.total_rounds, 'раунд', 'раунда', 'раундов')}
         </p>
       </header>
 
-      {showing && <CourtGrid round={showing} totalRounds={data.total_rounds} />}
+      <Controls tournament={tournament} onChange={setLive} />
 
-      <Standings rows={data.standings} />
+      {showing && (
+        <CourtGrid
+          round={showing}
+          totalRounds={tournament.total_rounds}
+          scoring={scoring}
+          nav={
+            tournament.rounds.length > 1
+              ? {
+                  onStep: (delta) => setLooking(at + delta),
+                  canGoBack: at > 0,
+                  canGoForward: at < tournament.rounds.length - 1,
+                }
+              : undefined
+          }
+        />
+      )}
 
-      <Climb progression={data.progression} />
+      <Standings rows={tournament.standings} />
+
+      <Climb progression={tournament.progression} />
     </>
+  )
+}
+
+/**
+ * What the organiser can do to the tournament as a whole.
+ *
+ * Drawing the next round is offered to any member, not just the organiser, and the server
+ * agrees: the next round follows from the standing and nobody chooses anything, so whoever
+ * enters the last score of a round should not have to wait for someone else to press this.
+ */
+function Controls({
+  tournament,
+  onChange,
+}: {
+  tournament: Tournament
+  onChange: (tournament: Tournament) => void
+}) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const { viewer } = tournament
+  const started = tournament.rounds.some((round) =>
+    round.matches.some((match) => match.score_a !== null),
+  )
+  const roundsDrawn = tournament.rounds.length
+  const currentComplete = tournament.rounds.at(-1)?.complete ?? false
+  const canAdvance =
+    !tournament.finished && currentComplete && roundsDrawn < tournament.total_rounds
+
+  async function run(what: string, action: () => Promise<Tournament>) {
+    setBusy(what)
+    setError(null)
+    try {
+      onChange(await action())
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Не получилось')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  if (tournament.finished || !viewer.is_member) return null
+
+  const buttons = [
+    canAdvance && {
+      key: 'next',
+      label: 'Следующий раунд',
+      run: () => api.nextRound(tournament.id),
+    },
+    viewer.is_organiser &&
+      !started && {
+        key: 'reroll',
+        label: 'Пересдать',
+        run: () => api.reroll(tournament.id),
+      },
+    viewer.is_organiser && {
+      key: 'finish',
+      label: 'Завершить',
+      run: () => api.finish(tournament.id),
+    },
+  ].filter((entry) => entry !== false && entry !== undefined)
+
+  if (buttons.length === 0) return null
+
+  return (
+    <div className="actions">
+      {buttons.map((button) => (
+        <button
+          className="button button-quiet"
+          key={button.key}
+          type="button"
+          disabled={busy !== null}
+          onClick={() => void run(button.key, button.run)}
+        >
+          {busy === button.key ? '…' : button.label}
+        </button>
+      ))}
+      {error && <p className="field-error">{error}</p>}
+    </div>
   )
 }

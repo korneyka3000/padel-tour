@@ -524,10 +524,52 @@ a.card.visually-hidden {
 }
 
 /* A roster is a list of names, not eight rows of furniture. */
+/*
+ * Chips while there is nothing to do with them; one row per player once there is. Three
+ * controls per name wrapped inline turns eight players into a paragraph of grey verbs.
+ */
 .roster {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+}
+
+.roster.is-editable {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 0;
+}
+
+.roster.is-editable .roster-row {
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--edge);
+}
+
+.roster.is-editable .roster-row:last-of-type {
+  border-bottom: 0;
+}
+
+/* The verbs recede until the row is reached for. */
+.roster-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  opacity: 0.55;
+  transition: opacity 0.18s var(--ease);
+}
+
+.roster-row:hover .roster-actions,
+.roster-row:focus-within .roster-actions {
+  opacity: 1;
+}
+
+/* Touch has no hover, and a control nobody can reveal is a control that does not exist. */
+@media (hover: none) {
+  .roster-actions {
+    opacity: 1;
+  }
 }
 
 .roster-chip {
@@ -792,4 +834,163 @@ a.card.visually-hidden {
   .form-inline .field-error {
     flex-basis: 100%;
   }
+}
+
+/* ─────────────────────────────────────────────────────── running a tournament */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+}
+
+.button-quiet {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--court) 45%, transparent);
+  border: 1px solid var(--edge);
+}
+
+.button-quiet:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--court-lit) 50%, transparent);
+  border-color: var(--edge-strong);
+}
+
+.button-small {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+/* Entry lives under the court, in the flow, so it lands on nothing. */
+.court-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.court-score {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-height: 2rem;
+}
+
+.score-input {
+  width: 3.4rem;
+  padding: 0.35rem 0.4rem;
+  font: inherit;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--ink);
+  background: color-mix(in oklab, var(--court) 30%, transparent);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+}
+
+.score-input:focus-visible {
+  border-color: var(--glass);
+}
+
+/* The spinners cost more width than they are worth at this size. */
+.score-input::-webkit-outer-spin-button,
+.score-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.score-input {
+  appearance: textfield;
+}
+
+.score-colon {
+  color: var(--ink-faint);
+}
+
+/* ─────────────────────────────────────────────────────── assembling one */
+
+.picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.85rem;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink-dim);
+  background: color-mix(in oklab, var(--court) 30%, transparent);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    color 0.18s var(--ease),
+    background 0.18s var(--ease),
+    border-color 0.18s var(--ease);
+}
+
+.pick:hover {
+  border-color: var(--edge-strong);
+  color: var(--ink);
+}
+
+.pick.is-picked {
+  color: var(--night);
+  background: var(--glass);
+  border-color: var(--glass);
+}
+
+.pick-hint {
+  font-size: 0.7rem;
+  opacity: 0.75;
+}
+
+.choice {
+  margin: 0 0 1.1rem;
+  padding: 0;
+  border: 0;
+}
+
+.choice-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.round-nav {
+  display: inline-flex;
+  gap: 0.6rem;
+  margin-left: 0.9rem;
+  font-size: 1.1rem;
+}
+
+.round-nav .link-button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* Renaming happens in the row it belongs to, so the form has to behave like a row. */
+.roster-rename {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.roster-rename .field-input {
+  flex: 1 1 8rem;
+  min-width: 0;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.9rem;
 }
