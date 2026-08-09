@@ -15,6 +15,7 @@ on a route — the bot calls those functions directly and must not be able to sk
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
 from sqlalchemy import select
@@ -34,6 +35,20 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from padel_tour.db import Account
+
+    from .views import TournamentView
+
+
+@dataclass(frozen=True, slots=True)
+class Viewing:
+    """Where one caller stands in one tournament. All false is a stranger, and correct."""
+
+    is_member: bool = False
+    is_organiser: bool = False
+    #: The player this account holds here, or ``None`` if they have claimed none.
+    plays_as: uuid.UUID | None = None
+    #: Nobody organises this tournament, so it belongs to whoever is in the group.
+    anyone_may_score: bool = False
 
 
 class Anonymous:
@@ -163,12 +178,65 @@ async def require_can_score(
     if tournament.organiser_account_id is None or tournament.organiser_account_id == account.id:
         return
 
-    plays_as = await session.scalar(
-        select(Player.id)
-        .join(TournamentPlayer, TournamentPlayer.player_id == Player.id)
-        .where(TournamentPlayer.tournament_id == tournament_id, Player.account_id == account.id)
-    )
+    plays_as = await _plays_as(session, account, tournament_id)
     if plays_as is None:
         return
     if plays_as not in players_on_court:
         raise ForbiddenError("Счёт вносит тот, кто играл этот матч, или организатор")
+
+
+async def _plays_as(
+    session: AsyncSession, account: Account, tournament_id: uuid.UUID
+) -> uuid.UUID | None:
+    """The player this account holds in this tournament, if they have claimed one."""
+    return await session.scalar(
+        select(Player.id)
+        .join(TournamentPlayer, TournamentPlayer.player_id == Player.id)
+        .where(TournamentPlayer.tournament_id == tournament_id, Player.account_id == account.id)
+    )
+
+
+# --------------------------------------------------------------------------- asking instead
+
+
+async def can_see(session: AsyncSession, actor: Actor, group_id: uuid.UUID) -> bool:
+    """:func:`require_member` asked as a question.
+
+    Written as a call rather than a copy of the condition on purpose. An interface that has
+    to grey out a control needs the same answer the service layer will give, and two
+    implementations of one rule drift the first time the rule changes.
+    """
+    try:
+        await require_member(session, actor, group_id)
+    except ForbiddenError, NotSignedInError:
+        return False
+    return True
+
+
+async def can_organise(session: AsyncSession, actor: Actor, tournament_id: uuid.UUID) -> bool:
+    """:func:`require_organiser` asked as a question."""
+    try:
+        await require_organiser(session, actor, tournament_id)
+    except ForbiddenError, NotSignedInError:
+        return False
+    return True
+
+
+async def viewing(session: AsyncSession, actor: Actor, tournament: TournamentView) -> Viewing:
+    """What this caller is, relative to this tournament.
+
+    The inputs to :func:`require_can_score` rather than its verdict. A screen showing four
+    courts needs to know which of them it may offer to score, and the honest way to tell it
+    is to hand over what the rule reads — not a boolean per match, which would be one field
+    per court, all of them stale the moment a Mexicano draws its next round.
+    """
+    if not await can_see(session, actor, tournament.group_id):
+        return Viewing()
+
+    account = None if actor is None or isinstance(actor, Anonymous) else actor
+    return Viewing(
+        is_member=True,
+        is_organiser=await can_organise(session, actor, tournament.id),
+        plays_as=None if account is None else await _plays_as(session, account, tournament.id),
+        anyone_may_score=tournament.organiser_account_id is None,
+    )

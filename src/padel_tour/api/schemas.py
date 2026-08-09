@@ -20,6 +20,7 @@ from padel_tour.services import (
     RoundView,
     TournamentSummary,
     TournamentView,
+    Viewing,
 )
 
 
@@ -59,6 +60,10 @@ class Match(BaseModel):
     team_b: tuple[str, str]
     score_a: int | None
     score_b: int | None
+    team_a_ids: tuple[uuid.UUID, uuid.UUID] = Field(
+        description="The same players by id, for deciding whether this court is yours to score"
+    )
+    team_b_ids: tuple[uuid.UUID, uuid.UUID]
 
 
 class Round(BaseModel):
@@ -78,6 +83,8 @@ class Round(BaseModel):
                     team_b=match.team_b,
                     score_a=match.score_a,
                     score_b=match.score_b,
+                    team_a_ids=match.team_a_ids,
+                    team_b_ids=match.team_b_ids,
                 )
                 for match in view.matches
             ],
@@ -114,6 +121,34 @@ class PlayerProgress(BaseModel):
     points: list[ProgressPoint]
 
 
+class Viewer(BaseModel):
+    """Where the caller stands, so the screen can offer only what the server will accept.
+
+    Four inputs rather than a verdict per match. The rule behind them lives in
+    ``services.permissions.require_can_score`` and has branches the client cannot infer from
+    a boolean — and a boolean per court would be one field per court, every one of them
+    stale the moment a Mexicano draws its next round.
+    """
+
+    is_member: bool = False
+    is_organiser: bool = False
+    plays_as: uuid.UUID | None = Field(
+        default=None, description="The player you are in this tournament, if you have claimed one"
+    )
+    anyone_may_score: bool = Field(
+        default=False, description="No organiser, so the group scores it between them"
+    )
+
+    @classmethod
+    def of(cls, seen: Viewing) -> Viewer:
+        return cls(
+            is_member=seen.is_member,
+            is_organiser=seen.is_organiser,
+            plays_as=seen.plays_as,
+            anyone_may_score=seen.anyone_may_score,
+        )
+
+
 class Tournament(BaseModel):
     id: uuid.UUID
     group_id: uuid.UUID
@@ -128,10 +163,15 @@ class Tournament(BaseModel):
     rounds: list[Round]
     standings: list[Standing]
     progression: list[PlayerProgress]
+    viewer: Viewer = Field(
+        default_factory=Viewer,
+        description="Defaults to a stranger, which is what a link-holder is",
+    )
 
     @classmethod
-    def of(cls, view: TournamentView) -> Tournament:
+    def of(cls, view: TournamentView, seen: Viewing | None = None) -> Tournament:
         return cls(
+            viewer=Viewer() if seen is None else Viewer.of(seen),
             id=view.id,
             group_id=view.group_id,
             format=view.format,

@@ -48,10 +48,18 @@ class MatchView:
     team_b: tuple[str, str]
     score_a: int | None
     score_b: int | None
+    #: The same four players by id. Names are for reading; these are for deciding, and two
+    #: people in a group may legitimately share one.
+    team_a_ids: tuple[uuid.UUID, uuid.UUID]
+    team_b_ids: tuple[uuid.UUID, uuid.UUID]
 
     @property
     def played(self) -> bool:
         return self.score_a is not None
+
+    @property
+    def player_ids(self) -> frozenset[uuid.UUID]:
+        return frozenset(self.team_a_ids + self.team_b_ids)
 
 
 @dataclass(frozen=True, slots=True)

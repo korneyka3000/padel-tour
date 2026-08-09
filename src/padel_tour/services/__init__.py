@@ -58,11 +58,15 @@ from .invites import create_invite, peek_invite, redeem_invite
 from .permissions import (
     ANONYMOUS,
     Anonymous,
+    Viewing,
+    can_organise,
+    can_see,
     is_member,
     require_can_score,
     require_member,
     require_organiser,
     require_owner,
+    viewing,
 )
 from .tournaments import (
     active_tournament,
@@ -118,6 +122,7 @@ __all__ = [
     "TournamentNotFoundError",
     "TournamentSummary",
     "TournamentView",
+    "Viewing",
     "account_for_identity",
     "account_for_session",
     "active_tournament",
@@ -125,6 +130,8 @@ __all__ = [
     "advance_round",
     "amend_score",
     "attach_identity",
+    "can_organise",
+    "can_see",
     "close_all_sessions",
     "close_session",
     "count_tournaments",
@@ -156,4 +163,5 @@ __all__ = [
     "require_owner",
     "reroll_tournament",
     "start_tournament",
+    "viewing",
 ]

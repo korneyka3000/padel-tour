@@ -100,6 +100,8 @@ def _to_view(row: Tournament, state: TournamentState) -> TournamentView:
                     team_b=(names[match.team_b.a], names[match.team_b.b]),
                     score_a=match.result.score_a if match.result else None,
                     score_b=match.result.score_b if match.result else None,
+                    team_a_ids=(to_uuid(match.team_a.a), to_uuid(match.team_a.b)),
+                    team_b_ids=(to_uuid(match.team_b.a), to_uuid(match.team_b.b)),
                 )
                 for match in rnd.matches
             ),

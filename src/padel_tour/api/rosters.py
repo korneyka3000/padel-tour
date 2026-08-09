@@ -16,7 +16,7 @@ from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
 
 from padel_tour.services import add_player, create_group, list_players
-from padel_tour.services.groups import get_group
+from padel_tour.services.groups import deactivate_player, get_group, rename_player
 
 from .deps import API_PREFIX, RequiredAccount, Session
 from .schemas import Group, GroupDetail, Player
@@ -38,6 +38,29 @@ class NewPlayer(BaseModel):
 async def make_group(body: NewGroup, session: Session, actor: RequiredAccount) -> Group:
     """Start a group. You own it."""
     return Group.of(await create_group(session, body.name, owner_account_id=actor.id))
+
+
+class RenamedPlayer(BaseModel):
+    name: str = Field(min_length=1, max_length=MAX_NAME)
+
+
+@router.patch("/players/{player_id}")
+async def rename(
+    player_id: uuid.UUID, body: RenamedPlayer, session: Session, actor: RequiredAccount
+) -> Player:
+    """Fix a name. Owners only."""
+    return Player.of(await rename_player(session, player_id, body.name, actor=actor))
+
+
+@router.delete("/players/{player_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove(player_id: uuid.UUID, session: Session, actor: RequiredAccount) -> None:
+    """Take somebody off the roster. Owners only.
+
+    Hidden, not deleted. The row carries every match they played, and dropping it would
+    rewrite the group's history to say those games never happened. They stop appearing in
+    the list a new tournament is drawn from, and stay in the tables of the old ones.
+    """
+    await deactivate_player(session, player_id, actor=actor)
 
 
 @router.post("/groups/{group_id}/players", status_code=status.HTTP_201_CREATED)

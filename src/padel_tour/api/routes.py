@@ -26,6 +26,7 @@ from padel_tour.services import (
     list_players,
     list_tournaments,
     require_member,
+    viewing,
 )
 from padel_tour.services.groups import get_group, get_player
 from padel_tour.services.permissions import Anonymous
@@ -129,13 +130,21 @@ async def read_active(
     view = await active_tournament(session, group_id)
     if view is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-    return Tournament.of(view)
+    return Tournament.of(view, await viewing(session, actor, view))
 
 
 @router.get("/tournaments/{tournament_id}")
-async def read_tournament(tournament_id: uuid.UUID, session: Session) -> Tournament:
-    """Open to anyone holding the link — the whole point of a link is to show it to someone."""
-    return Tournament.of(await get_tournament(session, tournament_id))
+async def read_tournament(
+    tournament_id: uuid.UUID, session: Session, actor: CurrentAccount
+) -> Tournament:
+    """Open to anyone holding the link — the whole point of a link is to show it to someone.
+
+    Still asks who is looking. A stranger gets a page with no controls; the four who played
+    court 2 get a score box on court 2. The account decides what is offered, never what is
+    shown.
+    """
+    view = await get_tournament(session, tournament_id)
+    return Tournament.of(view, await viewing(session, actor, view))
 
 
 @router.get("/players/{player_id}")

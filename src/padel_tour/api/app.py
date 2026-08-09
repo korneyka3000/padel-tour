@@ -27,6 +27,7 @@ from padel_tour.services import (
 from .auth import router as auth_router
 from .deps import API_PREFIX, dispose_engine
 from .invites import router as invites_router
+from .play import router as play_router
 from .rosters import router as rosters_router
 from .routes import router
 from .telegram import router as telegram_router
@@ -62,7 +63,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["*"],
     )
 
@@ -104,6 +105,7 @@ def create_app() -> FastAPI:
     app.include_router(router)
     app.include_router(auth_router)
     app.include_router(invites_router)
+    app.include_router(play_router)
     app.include_router(rosters_router)
     app.include_router(telegram_router)
     return app
