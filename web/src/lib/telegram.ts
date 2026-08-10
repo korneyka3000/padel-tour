@@ -14,8 +14,9 @@
 interface TelegramWebApp {
   /** Signed, and meaningless until the server says otherwise. */
   initData: string
-  /** What `?startapp=` carried, which is how a chat says "open this tournament". */
-  initDataUnsafe?: { start_param?: string }
+  /** What `?startapp=` carried, and who Telegram thinks is looking — unverified, and only
+   *  read here for things that do not matter if a liar changes them, like the language. */
+  initDataUnsafe?: { start_param?: string; user?: { language_code?: string } }
   /** Colours the client's own chrome to match the page. */
   ready: () => void
   expand: () => void
@@ -60,4 +61,16 @@ export function settle(): void {
   if (app === null) return
   app.ready()
   app.expand()
+}
+
+/**
+ * The language Telegram is set to, when we are inside it.
+ *
+ * Read from the *unsafe* half of `initData` on purpose. Everything in there is a claim
+ * rather than a fact, which rules it out for anything that grants access — but the worst a
+ * forged language does is show somebody the wrong words, and they can change it back in the
+ * top bar. Trading a signature check for a correct first screen is the right way round here.
+ */
+export function telegramLanguage(): string | null {
+  return webApp()?.initDataUnsafe?.user?.language_code ?? null
 }

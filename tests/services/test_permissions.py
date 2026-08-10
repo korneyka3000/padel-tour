@@ -19,6 +19,7 @@ from padel_tour.services import (
     advance_round,
     ensure_identity,
     finish_tournament,
+    groups_for_account,
     is_admin,
     is_member,
     record_score,
@@ -272,3 +273,20 @@ async def test_an_admin_can_still_be_an_ordinary_player(
 
     assert await is_admin(session, account)
     assert await is_member(session, account, club.group_id)
+
+
+async def test_an_admin_sees_every_group(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The list answers "what can I open", and for an admin that is everything.
+
+    Narrower than the permission rule sends somebody hunting for a URL they are already
+    allowed to visit — which is exactly what the empty list in a Mini App was.
+    """
+    club = await make_club(session)
+    outsider = await ensure_identity(session, PROVIDER_TELEGRAM, "999")
+    assert await groups_for_account(session, outsider) == []
+
+    monkeypatch.setenv("ADMIN_TELEGRAM_IDS", "999")
+
+    assert [view.id for view in await groups_for_account(session, outsider)] == [club.group_id]

@@ -11,6 +11,7 @@ import { createContext, useCallback, useContext, useMemo, useState } from 'react
 import { ApiError } from '../lib/api'
 import type { Key, Locale, Translate } from '../lib/i18n'
 import { DICTIONARIES, isLocale, preferredLocale, translator } from '../lib/i18n'
+import { telegramLanguage } from '../lib/telegram'
 
 const STORAGE_KEY = 'pt_locale'
 
@@ -33,8 +34,10 @@ function stored(): string | null {
 }
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
+  // Telegram's own setting first, because inside Telegram that is the language the person
+  // has already chosen for everything else. A stored choice still beats it — see below.
   const [locale, setLocale] = useState<Locale>(() =>
-    preferredLocale(stored(), navigator.language),
+    preferredLocale(stored(), telegramLanguage() ?? navigator.language),
   )
 
   const choose = useCallback((next: Locale) => {

@@ -69,15 +69,45 @@ MAX_PAGE = 100
 async def health(session: Session) -> Health:
     """Is the service up, can it reach the database, and does that database match this code?
 
-    Connectivity was never the interesting question. Twice now a deployment has landed
-    before its migration and answered 500 to half the API while reporting itself perfectly
-    healthy — the code believed in a column the schema had not got (Р-039, Р-043).
+    Connectivity was never the interesting question. Twice a deployment has landed before
+    its migration and answered 500 to half the API while reporting itself perfectly healthy,
+    because the code believed in a column the schema had not got (Р-039, Р-043).
 
-    The first fix read one whole row, which caught it for one table and missed it for the
-    next: the second incident was ``magic_links`` while this was watching ``tournaments``.
-    So it stopped sampling and started comparing. One query lists what the database has;
-    the mapped metadata says what the code expects; the answer names the difference.
+    So it compares: one catalogue query for what the database has, the mapped metadata for
+    what the code expects, and the answer names the difference.
+
+    **Checked once per process, not once per request.** A catalogue scan is not free and
+    uptime monitors call this every few seconds, while the schema can only move underneath a
+    running process when somebody runs a migration — which on this deployment means a new
+    process anyway. So a match is remembered and a mismatch is not: healthy stays cheap
+    forever, and a process that saw a gap keeps looking until the migration lands and it
+    can stop.
     """
+    try:
+        await session.execute(text("SELECT 1"))
+    except Exception:  # any failure here means the same thing to a caller
+        return Health(status="degraded", database="unreachable")
+
+    missing = await _schema_gap(session)
+    if missing is None:
+        return Health(status="degraded", database="unreachable")
+    if missing:
+        # Named, because "degraded" sends somebody to the logs and this sends them to the
+        # migration that has not run.
+        return Health(status="degraded", database=f"schema behind code: {', '.join(missing)}")
+    return Health(status="ok", database="ok")
+
+
+#: Set once the schema has been seen to match, and never unset. See :func:`health`.
+_schema_verified = False
+
+
+async def _schema_gap(session: Session) -> list[str] | None:
+    """Columns the code maps and the database has not got. ``None`` if we could not look."""
+    global _schema_verified  # noqa: PLW0603 - one flag, one writer, and it only ever latches
+    if _schema_verified:
+        return []
+
     try:
         present = {
             (row.table_name, row.column_name)
@@ -88,8 +118,8 @@ async def health(session: Session) -> Health:
                 )
             )
         }
-    except Exception:  # any failure here means the same thing to a caller
-        return Health(status="degraded", database="unreachable")
+    except Exception:
+        return None
 
     missing = sorted(
         f"{table.name}.{column.name}"
@@ -97,11 +127,9 @@ async def health(session: Session) -> Health:
         for column in table.columns
         if (table.name, column.name) not in present
     )
-    if missing:
-        # Named, because "degraded" sends somebody reading logs and this sends them to the
-        # migration that has not run.
-        return Health(status="degraded", database=f"schema behind code: {', '.join(missing)}")
-    return Health(status="ok", database="ok")
+    if not missing:
+        _schema_verified = True
+    return missing
 
 
 @router.get("/groups")

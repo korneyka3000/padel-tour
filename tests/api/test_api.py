@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import text
 
 from conftest import NAMES, seed_tournament, sign_in
+from padel_tour.api import routes
 from padel_tour.db import PROVIDER_EMAIL
 from padel_tour.engine import Format
 from padel_tour.services import account_for_identity, finish_tournament
@@ -306,3 +307,31 @@ async def test_the_schema_and_docs_live_under_the_api_prefix(client: AsyncClient
     assert "/api/tournaments/{tournament_id}" in paths
     # The webhook is machinery, not a public endpoint.
     assert "/api/telegram/webhook" not in paths
+
+
+async def test_health_stops_looking_once_the_schema_matches(client: AsyncClient) -> None:
+    """A catalogue scan on every uptime ping is a cost with no buyer.
+
+    The schema cannot move under a running process without a migration, and on this
+    deployment a migration means a new process — so a match is remembered. The second call
+    is a bare liveness check.
+    """
+    assert (await client.get("/api/health")).json()["status"] == "ok"
+    assert routes._schema_verified
+
+    assert (await client.get("/api/health")).json()["status"] == "ok"
+
+
+async def test_health_keeps_looking_while_the_schema_is_behind(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    """A mismatch is not remembered, so the answer flips the moment the migration lands
+    rather than staying wrong until somebody restarts the thing."""
+    async with engine.begin() as connection:
+        await connection.execute(text("ALTER TABLE tournaments DROP COLUMN chart_message_id"))
+    assert (await client.get("/api/health")).json()["status"] == "degraded"
+
+    async with engine.begin() as connection:
+        await connection.execute(text("ALTER TABLE tournaments ADD COLUMN chart_message_id BIGINT"))
+
+    assert (await client.get("/api/health")).json()["status"] == "ok"

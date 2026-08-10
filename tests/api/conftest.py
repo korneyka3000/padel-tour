@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from padel_tour.api import create_app
+from padel_tour.api import create_app, routes
 from padel_tour.engine import Format, PairingPattern, TournamentConfig
 from padel_tour.services import add_player, create_group, record_score, start_tournament
 from padel_tour.services.mail import InMemoryMailer
@@ -26,6 +26,16 @@ if TYPE_CHECKING:
     from padel_tour.services import TournamentView
 
 NAMES = ("Аня", "Боря", "Вика", "Гриша", "Даша", "Егор", "Жанна", "Зина")
+
+
+@pytest.fixture(autouse=True)
+def _unverified_schema() -> None:
+    """The health check remembers a schema it has seen match, and that is process-wide.
+
+    Right for production, where a migration means a new process anyway; wrong for a suite
+    where one test drops a column after another has already declared the schema fine.
+    """
+    routes._schema_verified = False
 
 
 @pytest.fixture

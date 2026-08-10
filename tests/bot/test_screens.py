@@ -262,16 +262,16 @@ async def test_the_caption_opens_telegram_when_a_mini_app_is_configured(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A direct link, because a web_app button is private-chat only and this bot lives in
-    groups. The direct kind opens the app full-screen from a group too."""
+    groups. The direct kind opens the app full-screen from a group too — and needs only the
+    username, since a Main Mini App has no short name."""
     monkeypatch.setenv("BOT_USERNAME", "padeltourbot")
-    monkeypatch.setenv("MINI_APP_NAME", "tour")
     view = await make_tournament(session)
     view = await play_round(session, view, 1)
 
     _, markup = screens.chart_caption(view)
 
     links = [button.url for row in markup.inline_keyboard for button in row if button.url]
-    assert links == [f"https://t.me/padeltourbot/tour?startapp=t_{view.id}"]
+    assert links == [f"https://t.me/padeltourbot?startapp=t_{view.id}"]
 
 
 # --------------------------------------------------------------------------- history

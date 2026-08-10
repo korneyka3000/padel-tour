@@ -14,7 +14,7 @@ from .errors import (
     GroupNotFoundError,
     PlayerNotFoundError,
 )
-from .permissions import require_owner
+from .permissions import is_admin, require_owner
 from .views import GroupView, PlayerView
 
 if TYPE_CHECKING:
@@ -91,7 +91,14 @@ async def groups_for_account(session: AsyncSession, account: Account) -> list[Gr
 
     An owner who has not claimed a player of their own still belongs to their group, which
     is why this is two conditions rather than one join.
+
+    An admin sees all of them. Not a shortcut: the list is supposed to answer "what can I
+    open", and for an admin the answer is everything — a list narrower than the permission
+    rule sends somebody to hunt for a URL they are already allowed to visit.
     """
+    if await is_admin(session, account):
+        return await list_groups(session)
+
     mine = select(Player.group_id).where(Player.account_id == account.id)
     ids = set(
         await session.scalars(

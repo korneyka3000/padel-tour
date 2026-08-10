@@ -67,11 +67,11 @@ class Settings(BaseSettings):
     mail_from: str = ""
 
     public_base_url: str = ""
-    #: The bot's @username and the Mini App's short name, as set with @BotFather's
-    #: ``/newapp``. Together they make the ``t.me`` link that opens the app inside Telegram.
-    #: Unset, buttons fall back to an ordinary link and Telegram's in-app browser.
+    #: The bot's @username. With a Main Mini App enabled — @BotFather, /mybots, Bot
+    #: Settings, Configure Mini App — this is all a ``t.me`` launch link needs; there is no
+    #: app short name any more. Unset, buttons fall back to an ordinary link and Telegram's
+    #: in-app browser.
     bot_username: str = ""
-    mini_app_name: str = ""
 
     #: Telegram user ids that may see and run everything, comma separated.
     #:
@@ -137,18 +137,20 @@ def mini_app_url(start_param: str = "") -> str:
     app opens full-screen inside the client, already signed in, because Telegram hands the
     page a signed statement of who pressed the button.
 
-    Falls back to the plain site when nobody has run ``/newapp``. That still works; it just
+    ``t.me/<bot>?startapp=<param>``, with no app short name in it: that was the older
+    ``/newapp`` shape, and a Main Mini App — Bot Settings, Configure Mini App — launches
+    from the bot's username alone.
+
+    Falls back to the plain site when no username is configured. That still works; it just
     opens in the in-app browser as a stranger, and this is the difference between a chart
-    the group can poke at and a chart it can look at.
+    the group can poke at and one it can only look at.
     """
-    current = settings()
-    bot = current.bot_username.strip().lstrip("@")
-    app = current.mini_app_name.strip()
-    if not bot or not app:
+    bot = settings().bot_username.strip().lstrip("@")
+    if not bot:
         return f"{base_url()}/{start_param.replace('_', '/', 1)}" if start_param else base_url()
 
-    suffix = f"?startapp={start_param}" if start_param else ""
-    return f"https://t.me/{bot}/{app}{suffix}"
+    suffix = f"?startapp={start_param}" if start_param else "?startapp"
+    return f"https://t.me/{bot}{suffix}"
 
 
 __all__ = [
