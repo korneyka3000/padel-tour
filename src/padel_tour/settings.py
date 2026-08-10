@@ -72,6 +72,24 @@ class Settings(BaseSettings):
     #: Unset, buttons fall back to an ordinary link and Telegram's in-app browser.
     bot_username: str = ""
     mini_app_name: str = ""
+
+    #: Telegram user ids that may see and run everything, comma separated.
+    #:
+    #: A capability, not a separate surface. An admin uses the same screens as everyone
+    #: else and simply is not stopped by membership — which is what somebody fixing a
+    #: group's tournament at eleven at night actually needs. A second interface would be a
+    #: second thing to keep working, and would still be missing whatever went wrong.
+    #:
+    #: Nothing stops an admin from also being an ordinary player: the identity is the same,
+    #: and being listed here adds permission rather than replacing anything.
+    admin_telegram_ids: str = ""
+
+    @property
+    def admins(self) -> frozenset[str]:
+        return frozenset(
+            part.strip() for part in self.admin_telegram_ids.split(",") if part.strip()
+        )
+
     #: Set by the platform, not by us. The fallback that makes a first deploy work before
     #: anybody has thought about ``PUBLIC_BASE_URL``.
     vercel_project_production_url: str = Field(default="")

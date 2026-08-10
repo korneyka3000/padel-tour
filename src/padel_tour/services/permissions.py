@@ -20,7 +20,8 @@ from typing import TYPE_CHECKING, Final
 
 from sqlalchemy import select
 
-from padel_tour.db import Group, Player, Tournament, TournamentPlayer
+from padel_tour.db import PROVIDER_TELEGRAM, Group, Identity, Player, Tournament, TournamentPlayer
+from padel_tour.settings import settings
 
 from .errors import (
     ForbiddenError,
@@ -91,6 +92,24 @@ def _identified(actor: Actor) -> Account:
     return actor
 
 
+async def is_admin(session: AsyncSession, actor: Account) -> bool:
+    """Is this account allowed everywhere?
+
+    Read from configuration rather than stored on the row on purpose: the list of people
+    who can reach into any group belongs with the deployment, not in data that a bug — or
+    somebody with a database client — could quietly change.
+    """
+    allowed = settings().admins
+    if not allowed:
+        return False
+    identities = await session.scalars(
+        select(Identity.external_id).where(
+            Identity.account_id == actor.id, Identity.provider == PROVIDER_TELEGRAM
+        )
+    )
+    return any(external in allowed for external in identities)
+
+
 async def is_member(session: AsyncSession, actor: Account, group_id: uuid.UUID) -> bool:
     """Does this account play in this group?"""
     player = await session.scalar(
@@ -116,7 +135,7 @@ async def require_member(session: AsyncSession, actor: Actor, group_id: uuid.UUI
     # it to nobody would strand the people already in it.
     if group.owner_account_id is None:
         return
-    if not await is_member(session, account, group_id):
+    if not await is_member(session, account, group_id) and not await is_admin(session, account):
         raise NotAMemberError("you are not a member of this group")
 
 
@@ -131,7 +150,7 @@ async def require_owner(session: AsyncSession, actor: Actor, group_id: uuid.UUID
     # better than locking it to nobody.
     if group.owner_account_id is None:
         return
-    if group.owner_account_id != account.id:
+    if group.owner_account_id != account.id and not await is_admin(session, account):
         raise NotTheOwnerError("only the group owner can do this")
 
 
@@ -150,6 +169,8 @@ async def require_organiser(session: AsyncSession, actor: Actor, tournament_id: 
 
     group = await session.get(Group, tournament.group_id)
     if group is not None and group.owner_account_id == account.id:
+        return
+    if await is_admin(session, account):
         return
     raise NotTheOrganiserError("only whoever started this tournament can do this")
 

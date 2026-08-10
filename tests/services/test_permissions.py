@@ -12,16 +12,21 @@ from typing import TYPE_CHECKING
 import pytest
 
 from conftest import account, claim, make_club
+from padel_tour.db import PROVIDER_TELEGRAM
 from padel_tour.engine import Format, TournamentConfig
 from padel_tour.services import (
     add_player,
     advance_round,
+    ensure_identity,
     finish_tournament,
+    is_admin,
+    is_member,
     record_score,
+    require_member,
     reroll_tournament,
     start_tournament,
 )
-from padel_tour.services.errors import ForbiddenError
+from padel_tour.services.errors import ForbiddenError, NotAMemberError
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -224,3 +229,46 @@ async def test_the_last_score_of_a_round_draws_the_next_one(session: AsyncSessio
 
     advanced = await advance_round(session, view.id, actor=anya)
     assert len(advanced.rounds) == 2
+
+
+# --------------------------------------------------------------------------- admins
+
+
+async def test_an_admin_is_not_stopped_by_membership(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A capability on the ordinary screens, rather than a second interface.
+
+    Somebody fixing a group's tournament at eleven at night needs the screens that group
+    uses, not a parallel set that would be missing whatever went wrong.
+    """
+    club = await make_club(session)
+    outsider = await ensure_identity(session, PROVIDER_TELEGRAM, "999")
+    monkeypatch.setenv("ADMIN_TELEGRAM_IDS", "999")
+
+    await require_member(session, outsider, club.group_id)
+
+
+async def test_without_the_setting_nobody_is_an_admin(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The list lives in the deployment, so an empty one means the door is shut."""
+    club = await make_club(session)
+    outsider = await ensure_identity(session, PROVIDER_TELEGRAM, "999")
+    monkeypatch.delenv("ADMIN_TELEGRAM_IDS", raising=False)
+
+    with pytest.raises(NotAMemberError):
+        await require_member(session, outsider, club.group_id)
+
+
+async def test_an_admin_can_still_be_an_ordinary_player(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Being listed adds permission; it does not replace who somebody is."""
+    club = await make_club(session)
+    account = await ensure_identity(session, PROVIDER_TELEGRAM, "777")
+    await claim(session, club.players[0], account)
+    monkeypatch.setenv("ADMIN_TELEGRAM_IDS", "777")
+
+    assert await is_admin(session, account)
+    assert await is_member(session, account, club.group_id)
