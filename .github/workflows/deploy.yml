@@ -7,14 +7,11 @@
 #
 # **Inert until two things are set**, and both are the repository owner's to do:
 #
-#   1. In Vercel: Settings → Git → turn OFF automatic deploys for `main`. While that is on,
-#      Vercel races this workflow and the ordering below buys nothing.
-#   2. In GitHub: Settings → Secrets → Actions, add
-#        DATABASE_URL   the Neon connection string
-#        VERCEL_TOKEN   a token from vercel.com/account/tokens
-#        VERCEL_ORG_ID, VERCEL_PROJECT_ID   from .vercel/project.json
+# Push-triggered deploys are off — see `git.deploymentEnabled` in vercel.json. With them on
+# Vercel raced this workflow and the ordering below bought nothing.
 #
-# Without them the job skips rather than half-deploying.
+# The secrets it needs live in the repository: DATABASE_URL, VERCEL_TOKEN, VERCEL_ORG_ID,
+# VERCEL_PROJECT_ID. Without them the job skips rather than half-deploying.
 
 name: Deploy
 
@@ -70,12 +67,12 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Source upload, not --prebuilt. Building here would mean reproducing Vercel's build
+      # environment on a runner — Node for the web, the Python runtime for the function —
+      # and a deploy that fails because the two drifted is a worse problem than a slower one.
       - name: Deploy
         if: steps.armed.outputs.ready == 'true'
-        run: |
-          npx vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
-          npx vercel@latest build --prod --token="$VERCEL_TOKEN"
-          npx vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        run: npx vercel@latest deploy --prod --yes --token="$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}

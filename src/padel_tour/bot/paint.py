@@ -30,19 +30,23 @@ INK_DIM = "#9CBCC0"
 INK_FAINT = "#5E8189"
 
 #: Straight from the web's `LANE_COLOURS`, so a group that looks at both sees one product.
+#:
+#: High chroma on purpose. Against a near-black court a muted set reads as one grey tangle
+#: once there are eight lines on it, and the hues are ordered so neighbouring places do not
+#: get neighbouring colours — two lines crossing is exactly when telling them apart matters.
 LANES = (
-    "#7FD4C8",
-    "#FFB454",
-    "#8FB8FF",
-    "#F2A5C4",
-    "#B9E36A",
-    "#E8F4F2",
-    "#63C6E8",
-    "#C6A6F0",
-    "#FF9E7A",
-    "#9AD6A0",
-    "#D8C77E",
-    "#A7C0D6",
+    "#3FF5D4",
+    "#FFAE2B",
+    "#6EA8FF",
+    "#FF6FD8",
+    "#B6FF3D",
+    "#FF5E5B",
+    "#31E1FF",
+    "#B388FF",
+    "#FFD93D",
+    "#4DFF9E",
+    "#FF8A3D",
+    "#8AA9FF",
 )
 
 #: Telegram scales a photo to the chat width, so this is about how much detail survives

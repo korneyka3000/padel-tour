@@ -359,22 +359,40 @@ def points_screen(view: TournamentView, court_no: int) -> Rendered:
 
 MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
+#: Longest name the table shows in full. Wider and the columns stop fitting a phone.
+NAME_WIDTH = 11
+
 
 def _standing_lines(view: TournamentView) -> list[str]:
-    """The table as ordinary text.
+    """The table, in columns that actually line up.
 
-    Not ``<pre>``. Telegram renders a pre block as a code listing with a copy button
-    attached, which is both ugly and a lie — nobody wants their standings on the clipboard —
-    and it wraps once a line passes the chat width, so the eight-player table folded every
-    row in half on a phone. Proportional text cannot align columns, so it does not try:
-    rank, name, points, difference, separated rather than padded.
+    Three attempts, and the reasons for the last one are the reasons the first two failed.
+
+    ``<pre>`` aligns, because it is monospaced — but Telegram renders it as a code listing
+    with a "copy" header bolted on, and wraps it once a line passes the chat width, which
+    folded every row of an eight-player table in half on a phone.
+
+    Proportional text has no header and no wrapping problem, and no alignment either: it
+    turned the table into a list of sentences, which is what it looked like and not what it
+    is. A table whose numbers do not stack is a table you cannot read down.
+
+    So: inline ``<code>``, one span per row. Monospaced, therefore aligned, and without the
+    block chrome — Telegram only draws the copy header for ``<pre>``. The medals sit
+    *outside* the span, at the end of the line, because an emoji is double-width and one in
+    the middle of a monospaced row throws every column after it out by a character.
     """
     lines = []
     for row in view.standings:
-        mark = MEDALS.get(row.rank, f"{row.rank}.")
-        diff = f" <i>{row.diff:+d}</i>" if row.played else ""
-        lines.append(f"{mark} <b>{esc(row.name)}</b> — {row.points_for}{diff}")
+        name = row.name if len(row.name) <= NAME_WIDTH else row.name[: NAME_WIDTH - 1] + "…"
+        cells = f"{row.rank:>2}  {name:<{NAME_WIDTH}} {row.points_for:>4} {row.diff:>+5}"
+        medal = f" {MEDALS[row.rank]}" if row.rank in MEDALS else ""
+        lines.append(f"<code>{esc(cells)}</code>{medal}")
     return lines
+
+
+def _table_header() -> str:
+    """Column names, in the same monospaced grid as the rows underneath them."""
+    return f"<code>{'':>2}  {'игрок':<{NAME_WIDTH}} {'очки':>4} {'разн':>5}</code>"
 
 
 def table_screen(view: TournamentView) -> Rendered:
@@ -384,9 +402,9 @@ def table_screen(view: TournamentView) -> Rendered:
 
     played = sum(1 for rnd in view.rounds if rnd.complete)
     lines = [
-        "<b>Таблица</b>",
-        f"<i>сыграно {played} из {view.total_rounds}</i>",
+        f"<b>Таблица</b> · сыграно {played} из {view.total_rounds}",
         "",
+        _table_header(),
         *_standing_lines(view),
     ]
 
@@ -411,6 +429,7 @@ def finish_screen(view: TournamentView) -> Rendered:
         lines.append(f"Победитель — <b>{esc(champion.name)}</b>, {champion.points_for} очков")
         lines.append("")
 
+    lines.append(_table_header())
     lines.extend(_standing_lines(view))
 
     if len(table) > PODIUM:

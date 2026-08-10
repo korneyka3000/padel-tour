@@ -16,14 +16,17 @@ import pytest
 from conftest import NAMES, make_tournament, play_round
 from padel_tour.bot import screens
 from padel_tour.bot.callbacks import Action, Callback, Screen
-from padel_tour.engine import Format, PairingPattern
+from padel_tour.engine import Format, PairingPattern, TournamentConfig
 from padel_tour.services import (
     PlayerView,
     TournamentSummary,
+    add_player,
+    create_group,
     finish_tournament,
     list_players,
     list_tournaments,
     record_score,
+    start_tournament,
 )
 
 if TYPE_CHECKING:
@@ -341,9 +344,10 @@ async def test_every_screen_uses_real_player_names(session: AsyncSession) -> Non
 async def test_no_screen_uses_a_code_block(session: AsyncSession) -> None:
     """``<pre>`` looked like a neat monospaced table and was neither.
 
-    Telegram renders it as a code listing with a copy button bolted on — nobody wants their
+    Telegram renders it as a code listing with a copy header bolted on — nobody wants their
     standings on the clipboard — and it wraps once a line passes the chat width, which
-    folded every row of an eight-player table in half on a phone.
+    folded every row of an eight-player table in half on a phone. Inline ``<code>`` is
+    monospaced without any of that, which is why the table is built out of it.
     """
     view = await make_tournament(session)
     view = await play_round(session, view, 1)
@@ -413,3 +417,40 @@ def test_history_names_the_podium_rather_than_only_the_winner() -> None:
     # The rest are counted rather than listed — eight names per line is a wall, and none
     # of them is left out of the count.
     assert "и ещё 5" in text
+
+
+async def test_the_table_lines_up(session: AsyncSession) -> None:
+    """A table whose numbers do not stack is a table you cannot read down.
+
+    Every row is one monospaced span of the same width, so the columns land on the same
+    character in each. The medal sits outside the span: an emoji is double-width, and one
+    in the middle of a monospaced row throws every column after it out by a character.
+    """
+    view = await make_tournament(session)
+    view = await play_round(session, view, 1)
+
+    text, _ = screens.table_screen(view)
+
+    rows = [line for line in text.splitlines() if line.startswith("<code>")]
+    assert len(rows) == len(view.standings) + 1  # the header shares the grid
+    widths = {len(line.partition("<code>")[2].partition("</code>")[0]) for line in rows}
+    assert len(widths) == 1, f"columns do not line up: {widths}"
+
+
+async def test_a_long_name_is_cut_rather_than_allowed_to_shove_the_columns(
+    session: AsyncSession,
+) -> None:
+    """Otherwise one long name widens its row and nothing below it lines up again."""
+    group = await create_group(session, "Клуб")
+    long_name = "Александра-Валентина"
+    players = [(await add_player(session, group.id, name)).id for name in (long_name, *NAMES[:3])]
+    view = await start_tournament(
+        session, group.id, players, TournamentConfig(Format.AMERICANO, points_per_match=24), seed=1
+    )
+
+    text, _ = screens.table_screen(view)
+
+    rows = [line for line in text.splitlines() if line.startswith("<code>")]
+    widths = {len(line.partition("<code>")[2].partition("</code>")[0]) for line in rows}
+    assert len(widths) == 1
+    assert long_name not in text

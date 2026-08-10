@@ -397,15 +397,44 @@ a {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  transition: opacity 0.18s var(--ease);
+  transition:
+    opacity 0.18s var(--ease),
+    stroke-width 0.18s var(--ease);
 }
 
 .climb-dot {
-  transition: opacity 0.18s var(--ease);
+  transition:
+    opacity 0.18s var(--ease),
+    r 0.18s var(--ease);
 }
 
+/* The light around a chosen line: the same path, wider, blurred, underneath. */
+.climb-glow {
+  fill: none;
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.45;
+  filter: blur(6px);
+}
+
+.climb-row.is-chosen .climb-line {
+  stroke-width: 3.5;
+}
+
+/* Further out of the way than before. Picking one line is asking for that line, so the
+   rest recede to context rather than staying company for it. */
 .climb-row.is-dimmed {
-  opacity: 0.18;
+  opacity: 0.12;
+}
+
+/* Reduced motion still gets the emphasis — it is information, not decoration — just
+   without anything sliding into place. */
+@media (prefers-reduced-motion: reduce) {
+  .climb-line,
+  .climb-dot {
+    transition: none;
+  }
 }
 
 .climb-label {

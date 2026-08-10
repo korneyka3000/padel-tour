@@ -21,19 +21,27 @@ const PAD = { top: 20, right: 82, bottom: 24, left: 24 }
 const FALLBACK_WIDTH = 640
 
 /** Distinct enough to tell apart at a glance, all sitting inside the court palette. */
+/**
+ * Twelve lanes, turned up.
+ *
+ * The old set was muted enough that against a near-black court eight lines read as one grey
+ * tangle. These are pushed towards the neon end — high chroma, kept light so they stay legible
+ * on the dark ground — and ordered so that neighbouring places do not get neighbouring hues,
+ * which is when two lines crossing become impossible to tell apart.
+ */
 const LANE_COLOURS = [
-  '#7FD4C8',
-  '#FFB454',
-  '#8FB8FF',
-  '#F2A5C4',
-  '#B9E36A',
-  '#E8F4F2',
-  '#63C6E8',
-  '#C6A6F0',
-  '#FF9E7A',
-  '#9AD6A0',
-  '#D8C77E',
-  '#A7C0D6',
+  '#3FF5D4',
+  '#FFAE2B',
+  '#6EA8FF',
+  '#FF6FD8',
+  '#B6FF3D',
+  '#FF5E5B',
+  '#31E1FF',
+  '#B388FF',
+  '#FFD93D',
+  '#4DFF9E',
+  '#FF8A3D',
+  '#8AA9FF',
 ]
 
 function laneColour(index: number): string {
@@ -128,7 +136,8 @@ export function Climb({ progression }: { progression: PlayerProgress[] }) {
 
             {lines.map((line, index) => {
               const colour = laneColour(index)
-              const dimmed = active !== null && active !== line.player_id
+              const chosen = active === line.player_id
+              const dimmed = active !== null && !chosen
               const path = line.points
                 .map(
                   (point, at) =>
@@ -140,10 +149,14 @@ export function Climb({ progression }: { progression: PlayerProgress[] }) {
               return (
                 <g
                   key={line.player_id}
-                  className={`climb-row${dimmed ? ' is-dimmed' : ''}`}
+                  className={`climb-row${dimmed ? ' is-dimmed' : ''}${chosen ? ' is-chosen' : ''}`}
                   onMouseEnter={() => setActive(line.player_id)}
                   onMouseLeave={() => setActive(null)}
                 >
+                  {/* The glow is a second, wider, blurred copy of the same path, drawn
+                      underneath. A CSS filter on the line itself would blur the line too;
+                      this leaves the stroke crisp and puts the light around it. */}
+                  {chosen && <path className="climb-glow" d={path} stroke={colour} />}
                   <path className="climb-line" d={path} stroke={colour} />
                   {line.points.map((point) => (
                     <circle
@@ -151,12 +164,17 @@ export function Climb({ progression }: { progression: PlayerProgress[] }) {
                       className="climb-dot"
                       cx={x(point.round_no)}
                       cy={y(point.rank)}
-                      r={3}
+                      r={chosen ? 4.5 : 3}
                       fill={colour}
                     />
                   ))}
                   {last && (
-                    <text className="climb-label" x={x(last.round_no) + 9} y={y(last.rank) + 4}>
+                    <text
+                      className="climb-label"
+                      x={x(last.round_no) + 9}
+                      y={y(last.rank) + 4}
+                      fill={chosen ? colour : undefined}
+                    >
                       {line.name}
                     </text>
                   )}
