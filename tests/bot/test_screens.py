@@ -8,6 +8,7 @@ scheduled must not offer to continue.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
@@ -18,6 +19,7 @@ from padel_tour.bot.callbacks import Action, Callback, Screen
 from padel_tour.engine import Format, PairingPattern
 from padel_tour.services import (
     PlayerView,
+    TournamentSummary,
     finish_tournament,
     list_players,
     list_tournaments,
@@ -311,3 +313,83 @@ async def test_every_screen_uses_real_player_names(session: AsyncSession) -> Non
     for text, _ in rendered:
         assert str(view.id) not in text
         assert "UUID" not in text
+
+
+# --------------------------------------------------------------------------- the ending
+
+
+async def test_no_screen_uses_a_code_block(session: AsyncSession) -> None:
+    """``<pre>`` looked like a neat monospaced table and was neither.
+
+    Telegram renders it as a code listing with a copy button bolted on — nobody wants their
+    standings on the clipboard — and it wraps once a line passes the chat width, which
+    folded every row of an eight-player table in half on a phone.
+    """
+    view = await make_tournament(session)
+    view = await play_round(session, view, 1)
+    roster = await list_players(session, view.group_id)
+
+    rendered = [
+        screens.round_screen(view),
+        screens.table_screen(view),
+        screens.finish_screen(view),
+        screens.draw_screen(view),
+        screens.roster_screen(roster, set(), (8,)),
+        screens.home("Вторничный падел", roster),
+    ]
+
+    for text, _ in rendered:
+        assert "<pre>" not in text
+
+
+async def test_the_ending_names_everybody_not_just_the_winner(session: AsyncSession) -> None:
+    """Seven of the eight also turned up and played every round."""
+    view = await make_tournament(session)
+    view = await play_round(session, view, 1)
+
+    text, _ = screens.finish_screen(view)
+
+    for row in view.standings:
+        assert row.name in text
+
+
+async def test_the_ending_says_who_won_before_it_says_anything_else(
+    session: AsyncSession,
+) -> None:
+    """A tournament that stops by greying out its buttons is an anticlimax."""
+    view = await make_tournament(session)
+    view = await play_round(session, view, 1)
+
+    text, _ = screens.finish_screen(view)
+
+    assert "Победитель" in text
+    assert text.index(view.standings[0].name) < text.index(view.standings[-1].name)
+
+
+# --------------------------------------------------------------------------- history
+
+
+def test_history_names_the_podium_rather_than_only_the_winner() -> None:
+    """A line about eight people used to be a line about one of them."""
+    entry = TournamentSummary(
+        id=uuid.uuid4(),
+        group_id=uuid.uuid4(),
+        format=Format.AMERICANO,
+        finished=True,
+        player_count=8,
+        rounds_played=7,
+        total_rounds=7,
+        created_at=datetime(2026, 8, 9, tzinfo=UTC),
+        finished_at=datetime(2026, 8, 9, tzinfo=UTC),
+        winner_name="Корней",
+        placings=("Корней", "Кеша", "Дима", "Артем", "Коля", "Рада", "Витя", "Кирилл"),
+    )
+
+    text, _ = screens.history_screen([entry])
+
+    assert "Корней" in text
+    assert "Кеша" in text
+    assert "Дима" in text
+    # The rest are counted rather than listed — eight names per line is a wall, and none
+    # of them is left out of the count.
+    assert "и ещё 5" in text

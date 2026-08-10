@@ -16,7 +16,7 @@ import pytest
 from PIL import Image
 
 from conftest import make_tournament, play_round
-from padel_tour.bot import chart, screens
+from padel_tour.bot import chart, paint, podium, screens
 from padel_tour.bot.screen_store import hide_chart, show_chart
 from padel_tour.db import Tournament
 
@@ -155,6 +155,47 @@ async def test_every_field_size_renders(session: AsyncSession, size: int) -> Non
 
 def test_the_palette_wraps_rather_than_running_out() -> None:
     """A group larger than the palette is a colour repeat, not an exception. Twenty-four
-    players is four more than the twelve lanes, and the twenty-fifth line has to get one."""
-    assert chart._lane(len(chart.LANES)) == chart._lane(0)
-    assert chart._lane(len(chart.LANES) * 2 + 3) == chart._lane(3)
+    players is twice the twelve lanes, and the twenty-fifth line still has to get one."""
+    assert paint.lane(len(paint.LANES)) == paint.lane(0)
+    assert paint.lane(len(paint.LANES) * 2 + 3) == paint.lane(3)
+
+
+# --------------------------------------------------------------------------- the ending
+
+
+async def test_the_final_card_draws_a_png(session: AsyncSession) -> None:
+    view = await make_tournament(session)
+    view = await play_round(session, view, 1)
+
+    card = podium.render(view)
+
+    assert card is not None
+    assert card.startswith(PNG_MAGIC)
+
+
+async def test_the_final_card_leaves_nobody_off_it(session: AsyncSession) -> None:
+    """Three on the podium, everybody else listed under it. The height has to allow for
+    that, or the fourth to eighth places fall off the bottom of the image."""
+    view = await make_tournament(session)
+    view = await play_round(session, view, 1)
+
+    card = podium.render(view)
+    assert card is not None
+
+    image = Image.open(BytesIO(card))
+    off_podium = len(view.standings) - podium.PODIUM
+    assert image.height == podium.LIST_TOP + podium.ROW * off_podium + podium.BOTTOM
+
+
+async def test_a_field_of_four_needs_no_list_under_the_podium(session: AsyncSession) -> None:
+    """Three on the blocks and one below. The layout must not assume a crowd."""
+    view = await make_tournament(session, size=4)
+    view = await play_round(session, view, 1)
+
+    assert podium.render(view) is not None
+
+
+async def test_nothing_played_means_no_card(session: AsyncSession) -> None:
+    view = await make_tournament(session)
+
+    assert podium.render(view) is None

@@ -30,6 +30,8 @@ from .callbacks import (
     toggle,
     winner,
 )
+from .wording import FORMAT_LABEL, PATTERN_LABEL
+from .wording import plural as _plural
 
 if TYPE_CHECKING:
     import uuid
@@ -45,21 +47,11 @@ if TYPE_CHECKING:
 #: A rendered screen: what to say and what to offer.
 type Rendered = tuple[str, InlineKeyboardMarkup]
 
-FORMAT_LABEL = {
-    Format.AMERICANO: "Американо",
-    Format.MEXICANO: "Мексикано",
-}
-PATTERN_LABEL = {
-    PairingPattern.CROSSOVER: "1+4 против 2+3",
-    PairingPattern.SPLIT: "1+3 против 2+4",
-    PairingPattern.TOP_HEAVY: "1+2 против 3+4",
-}
+
 #: A court holds four; below that there is no tournament to run.
 PLAYERS_PER_COURT = 4
 #: Names listed on the home screen before it collapses into "…and N more".
 HOME_NAME_LIMIT = 12
-#: Longest name a monospaced table column can show without wrapping on a phone.
-TABLE_NAME_WIDTH = 14
 #: How many of the standings fit in a photo caption without crowding the picture.
 PODIUM = 3
 
@@ -92,17 +84,6 @@ def home(group_name: str, roster: Sequence[PlayerView]) -> Rendered:
         builder.row(InlineKeyboardButton(text="🎾 Новый турнир", callback_data=show(Screen.ROSTER)))
     builder.row(*_nav(("📜 История", show(Screen.HISTORY))))
     return "\n".join(lines), builder.as_markup()
-
-
-def _plural(count: int, one: str, few: str, many: str) -> str:
-    """Russian noun agreement: 1 игрок, 2 игрока, 5 игроков, and the teens exception."""
-    last_two = count % 100
-    last = count % 10
-    if last == 1 and last_two != 11:  # noqa: PLR2004
-        return one
-    if 2 <= last <= 4 and not 12 <= last_two <= 14:  # noqa: PLR2004
-        return few
-    return many
 
 
 # --------------------------------------------------------------------------- roster
@@ -312,31 +293,70 @@ def points_screen(view: TournamentView, court_no: int) -> Rendered:
 # --------------------------------------------------------------------------- table
 
 
-def table_screen(view: TournamentView) -> Rendered:
-    """The leaderboard."""
-    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-    lines = ["<b>Таблица</b>", "", "<pre>"]
-    lines.append(f"{'#':>2} {'игрок':<14}{'очки':>6}{'разн':>6}")
-    for row in view.standings:
-        mark = medals.get(row.rank, f"{row.rank:>2}")
-        name = f"{row.name[:TABLE_NAME_WIDTH]:<{TABLE_NAME_WIDTH}}"
-        lines.append(f"{mark:>2} {name}{row.points_for:>6}{row.diff:>+6}")
-    lines.append("</pre>")
+MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
+
+def _standing_lines(view: TournamentView) -> list[str]:
+    """The table as ordinary text.
+
+    Not ``<pre>``. Telegram renders a pre block as a code listing with a copy button
+    attached, which is both ugly and a lie — nobody wants their standings on the clipboard —
+    and it wraps once a line passes the chat width, so the eight-player table folded every
+    row in half on a phone. Proportional text cannot align columns, so it does not try:
+    rank, name, points, difference, separated rather than padded.
+    """
+    lines = []
+    for row in view.standings:
+        mark = MEDALS.get(row.rank, f"{row.rank}.")
+        diff = f" <i>{row.diff:+d}</i>" if row.played else ""
+        lines.append(f"{mark} <b>{esc(row.name)}</b> — {row.points_for}{diff}")
+    return lines
+
+
+def table_screen(view: TournamentView) -> Rendered:
+    """The leaderboard while play is going on."""
     if view.finished:
-        lines.append("")
-        lines.append(f"🏆 Победитель — <b>{esc(view.standings[0].name)}</b>")
+        return finish_screen(view)
+
+    played = sum(1 for rnd in view.rounds if rnd.complete)
+    lines = [
+        "<b>Таблица</b>",
+        f"<i>сыграно {played} из {view.total_rounds}</i>",
+        "",
+        *_standing_lines(view),
+    ]
 
     builder = InlineKeyboardBuilder()
-    if view.finished:
-        builder.row(*_nav(("📈 График", show(Screen.CHART)), ("🏠 В начало", show(Screen.HOME))))
-    else:
-        builder.row(*_nav(("🎾 К раунду", show(Screen.ROUND)), ("📈 График", show(Screen.CHART))))
-        builder.row(
-            *_nav(
-                ("🏁 Завершить", confirm(Action.FINISH)),
-            )
-        )
+    builder.row(*_nav(("🎾 К раунду", show(Screen.ROUND)), ("📈 График", show(Screen.CHART))))
+    builder.row(*_nav(("🏁 Завершить", confirm(Action.FINISH))))
+    return "\n".join(lines), builder.as_markup()
+
+
+def finish_screen(view: TournamentView) -> Rendered:
+    """The ending, and it should feel like one.
+
+    A tournament that stops by quietly greying out its buttons is an anticlimax after two
+    hours on court. So: the winner is named on their own line, the podium is called out, and
+    everybody else is still listed — seven of the eight also turned up.
+    """
+    table = view.standings
+    lines = ["🏆 <b>Турнир завершён</b>", ""]
+
+    if table:
+        champion = table[0]
+        lines.append(f"Победитель — <b>{esc(champion.name)}</b>, {champion.points_for} очков")
+        lines.append("")
+
+    lines.extend(_standing_lines(view))
+
+    if len(table) > PODIUM:
+        # The people who did not make the podium are the reason there was a tournament.
+        lines.append("")
+        lines.append(f"<i>Сыграли все {len(table)}. Спасибо каждому.</i>")
+
+    builder = InlineKeyboardBuilder()
+    builder.row(*_nav(("📈 График", show(Screen.CHART)), ("📜 История", show(Screen.HISTORY))))
+    builder.row(*_nav(("🏠 В начало", show(Screen.HOME))))
     return "\n".join(lines), builder.as_markup()
 
 
@@ -384,17 +404,33 @@ def chart_caption(view: TournamentView) -> Rendered:
 
 
 def history_screen(entries: Sequence[TournamentSummary]) -> Rendered:
+    """What the group has played.
+
+    Each line used to name the winner and nobody else, which turned a record of eight
+    people into a record of one. The podium goes in, and the rest are counted rather than
+    reduced to a number with no faces attached.
+    """
     lines = ["<b>Прошедшие турниры</b>", ""]
     if not entries:
         lines.append("Пока ни одного.")
+
     for entry in entries:
         when = entry.created_at.strftime("%d.%m")
-        winner_name = esc(entry.winner_name) if entry.winner_name else "—"
-        status = "" if entry.finished else " <i>(идёт)</i>"
-        lines.append(
-            f"{when} · {FORMAT_LABEL[entry.format]} · {entry.player_count} чел. · "
-            f"🏆 {winner_name}{status}"
-        )
+        status = " <i>(идёт)</i>" if not entry.finished else ""
+        lines.append(f"<b>{when}</b> · {FORMAT_LABEL[entry.format]}{status}")
+
+        podium = entry.placings[:PODIUM]
+        if podium:
+            lines.append(
+                "  "
+                + " · ".join(f"{MEDALS[place]} {esc(name)}" for place, name in enumerate(podium, 1))
+            )
+            rest = entry.player_count - len(podium)
+            if rest > 0:
+                lines.append(f"  <i>и ещё {rest} {_plural(rest, 'игрок', 'игрока', 'игроков')}</i>")
+        else:
+            lines.append("  <i>ещё не сыграно ни одного раунда</i>")
+        lines.append("")
 
     builder = InlineKeyboardBuilder()
     builder.row(*_nav(("🏠 В начало", show(Screen.HOME))))

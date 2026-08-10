@@ -145,3 +145,9 @@ class TournamentSummary:
     created_at: datetime
     finished_at: datetime | None
     winner_name: str | None
+    #: Everyone who played, best first.
+    #:
+    #: The archive used to carry only the winner, which made a line about eight people a
+    #: line about one of them. Seven of the eight turned up, played every round, and were
+    #: not mentioned.
+    placings: tuple[str, ...] = ()

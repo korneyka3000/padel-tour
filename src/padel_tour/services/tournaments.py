@@ -166,6 +166,7 @@ def _to_summary(row: Tournament) -> TournamentSummary:
         created_at=row.created_at,
         finished_at=row.finished_at,
         winner_name=_names(row)[table[0].player] if table and played else None,
+        placings=tuple(_names(row)[line.player] for line in table) if played else (),
     )
 
 

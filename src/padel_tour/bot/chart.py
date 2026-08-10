@@ -11,32 +11,21 @@ chart is "when did I drop".
 **Pillow, not matplotlib.** In production the bot is served by the same serverless function
 as the API. matplotlib and numpy are tens of megabytes in that bundle for one screen; Pillow
 is a few, and drawing lines between points we already have is not the hard part.
-
-**The font ships with us.** Pillow carries no fonts, whatever is installed on the platform
-is not ours to predict, and every name here is Cyrillic. Golos Text is the same face the web
-uses, so the picture looks like the product rather than like a plotting library.
 """
 
 from __future__ import annotations
 
-from functools import lru_cache
-from io import BytesIO
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
+
+from .paint import COURT, INK_FAINT, NIGHT, WIDTH, as_png, font, lane
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from padel_tour.services import TournamentView
 
-FONT_PATH = Path(__file__).parent / "assets" / "GolosText.ttf"
-
-#: Telegram scales a photo to the chat width, so this is about how much detail survives
-#: rather than about how big it looks. Wide enough for a dozen rounds, short enough that a
-#: phone shows it without the caption scrolling away.
-WIDTH = 1000
 ROW = 54
 TOP = 70
 BOTTOM = 46
@@ -44,45 +33,8 @@ LEFT = 54
 #: Room on the right for the name at the end of each line, which is where the eye lands.
 RIGHT = 260
 
-#: Straight from the web's `LANE_COLOURS`, so a group that looks at both sees one product.
-LANES = (
-    "#7FD4C8",
-    "#FFB454",
-    "#8FB8FF",
-    "#F2A5C4",
-    "#B9E36A",
-    "#E8F4F2",
-    "#63C6E8",
-    "#C6A6F0",
-    "#FF9E7A",
-    "#9AD6A0",
-    "#D8C77E",
-    "#A7C0D6",
-)
-
-NIGHT = "#071A1F"
-COURT = "#0E4C5C"
-INK_FAINT = "#5E8189"
-INK = "#E8F4F2"
-
 DOT = 6
 LINE = 5
-
-
-@lru_cache(maxsize=8)
-def _font(size: int, weight: str = "SemiBold") -> ImageFont.FreeTypeFont:
-    """One face, several weights.
-
-    Cached because a tournament screen draws a dozen labels and parsing the file each time
-    would dominate the render. Variable font, so the weight is an axis rather than a file.
-    """
-    face = ImageFont.truetype(FONT_PATH, size)
-    face.set_variation_by_name(weight)
-    return face
-
-
-def _lane(index: int) -> str:
-    return LANES[index % len(LANES)]
 
 
 def render(view: TournamentView) -> bytes | None:
@@ -115,7 +67,7 @@ def render(view: TournamentView) -> bytes | None:
 
     # Drawn in reverse so the leader's line ends up on top of everyone else's.
     for index, (name, points) in reversed(list(enumerate(lines))):
-        colour = _lane(index)
+        colour = lane(index)
         path = [(x(point.round_no), y(point.rank)) for point in points]
         if len(path) > 1:
             draw.line(path, fill=colour, width=LINE, joint="curve")
@@ -125,12 +77,12 @@ def render(view: TournamentView) -> bytes | None:
         draw.text(
             (last[0] + 18, last[1]),
             f"{points[-1].rank}. {name}",
-            font=_font(26),
+            font=font(26),
             fill=colour,
             anchor="lm",
         )
 
-    return _as_png(image)
+    return as_png(image)
 
 
 def _draw_grid(
@@ -150,23 +102,17 @@ def _draw_grid(
         at = x(round_no)
         draw.line([(at, TOP - 30), (at, bottom + 22)], fill=COURT, width=2)
         draw.text(
-            (at, TOP - 46), f"R{round_no}", font=_font(22, "Medium"), fill=INK_FAINT, anchor="mm"
+            (at, TOP - 46), f"R{round_no}", font=font(22, "Medium"), fill=INK_FAINT, anchor="mm"
         )
 
     for place in range(1, places + 1):
         draw.text(
             (LEFT - 26, y(place)),
             str(place),
-            font=_font(22, "Medium"),
+            font=font(22, "Medium"),
             fill=INK_FAINT,
             anchor="rm",
         )
-
-
-def _as_png(image: Image.Image) -> bytes:
-    buffer = BytesIO()
-    image.save(buffer, format="PNG", optimize=True)
-    return buffer.getvalue()
 
 
 __all__ = ["render"]

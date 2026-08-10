@@ -14,8 +14,9 @@ import logging
 from typing import TYPE_CHECKING
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
 from padel_tour.db import PROVIDER_TELEGRAM
 from padel_tour.engine import Format, PadelEngineError, PairingPattern
@@ -45,7 +46,7 @@ from padel_tour.services.errors import (
 )
 from padel_tour.services.groups import get_group
 
-from . import chart, screens
+from . import chart, podium, screens
 from .callbacks import Action, Callback, Screen, parse_number, parse_player_id
 from .screen_store import hide_chart, remember_screen, show_chart, show_screen
 from .setup_state import Draft, DraftStore
@@ -280,6 +281,12 @@ async def on_press(query: CallbackQuery, session: AsyncSession, bot: Bot) -> Non
         await _chart(bot, session, chat_id, group_id, query)
         return
 
+    # Which tournament was running before this press, so the one press that ends one can be
+    # told apart from every press afterwards. Compared rather than flagged: the alternative
+    # is threading "did it just finish" back through four handlers that have no other reason
+    # to know.
+    running = await active_tournament(session, group_id)
+
     # Any other press means the chat has moved on, and the picture goes with it. Done here
     # rather than in each handler so nobody has to remember.
     await hide_chart(bot, session, chat_id, group_id)
@@ -303,6 +310,8 @@ async def on_press(query: CallbackQuery, session: AsyncSession, bot: Bot) -> Non
         return
 
     await query.answer(note or None)
+    if running is not None and await active_tournament(session, group_id) is None:
+        await _celebrate(bot, session, chat_id, running.id)
     if rendered is not None:
         await _paint(
             bot, session, chat_id, rendered, tournament_id=tournament_id, message_id=message_id
@@ -461,6 +470,32 @@ async def _show_tournament(session: AsyncSession, screen: Screen, group_id: uuid
             # case is spelled out rather than left to the default.
             return _NOTHING
     return _NOTHING
+
+
+async def _celebrate(
+    bot: Bot, session: AsyncSession, chat_id: int, tournament_id: uuid.UUID
+) -> None:
+    """Post the final card, once, at the moment a tournament ends.
+
+    Its own message, and unlike the chart it is not taken down again. Two hours on court
+    end in something the group can scroll back to and send to whoever missed it — deleting
+    that on the next button press would be the opposite of the point.
+
+    A failure here is swallowed. The tournament is over either way, and a chat that cannot
+    receive a photo should still see its final table.
+    """
+    view = await get_tournament(session, tournament_id)
+    card = podium.render(view)
+    if card is None:  # pragma: no cover - a tournament with no played round cannot finish here
+        return
+    try:
+        await bot.send_photo(
+            chat_id=chat_id,
+            photo=BufferedInputFile(card, filename="podium.png"),
+            caption=f"🏆 <b>{screens.esc(view.standings[0].name)}</b> берёт турнир",
+        )
+    except TelegramBadRequest:
+        logger.info("could not post the final card to %s", chat_id)
 
 
 async def _chart(

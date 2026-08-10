@@ -13,8 +13,33 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from padel_tour.engine import Format, PairingPattern
+
 if TYPE_CHECKING:
     from padel_tour.faults import CodedError
+
+FORMAT_LABEL = {
+    Format.AMERICANO: "Американо",
+    Format.MEXICANO: "Мексикано",
+}
+
+PATTERN_LABEL = {
+    PairingPattern.CROSSOVER: "1+4 против 2+3",
+    PairingPattern.SPLIT: "1+3 против 2+4",
+    PairingPattern.TOP_HEAVY: "1+2 против 3+4",
+}
+
+
+def plural(count: int, one: str, few: str, many: str) -> str:
+    """Russian noun agreement: 1 игрок, 2 игрока, 5 игроков, and the teens exception."""
+    last_two = count % 100
+    last = count % 10
+    if last == 1 and last_two != 11:  # noqa: PLR2004
+        return one
+    if 2 <= last <= 4 and not 12 <= last_two <= 14:  # noqa: PLR2004
+        return few
+    return many
+
 
 #: Code to Russian. Keyed by the code rather than the class so this file needs to import
 #: neither the engine nor the service layer — it is wording, not logic.
@@ -72,4 +97,4 @@ def say(exc: CodedError) -> str:
         return phrase
 
 
-__all__ = ["PHRASES", "say"]
+__all__ = ["FORMAT_LABEL", "PATTERN_LABEL", "PHRASES", "plural", "say"]
