@@ -37,13 +37,19 @@ from padel_tour.services import (
     reroll_tournament,
     start_tournament,
 )
-from padel_tour.services.errors import DuplicatePlayerNameError
+from padel_tour.services.errors import (
+    DuplicatePlayerNameError,
+    NoActiveTournamentError,
+    NoTournamentsYetError,
+    UnidentifiedCallerError,
+)
 from padel_tour.services.groups import get_group
 
 from . import screens
 from .callbacks import Action, Callback, Screen, parse_number, parse_player_id
 from .screen_store import remember_screen, show_screen
 from .setup_state import Draft, DraftStore
+from .wording import say
 
 if TYPE_CHECKING:
     import uuid
@@ -115,7 +121,7 @@ async def _actor(session: AsyncSession, message: Message) -> Account:
     passing "nobody" downstream would read as *system*, which skips every permission check.
     """
     if message.from_user is None:
-        raise ServiceError("Не вижу, от кого сообщение — напишите от своего имени")
+        raise UnidentifiedCallerError("no sender on this message — write under your own name")
     return await _account_for(session, message.from_user.id)
 
 
@@ -158,7 +164,7 @@ async def _paint(
 async def _require_active(session: AsyncSession, group_id: uuid.UUID) -> TournamentView:
     view = await active_tournament(session, group_id)
     if view is None:
-        raise ServiceError("Сейчас нет активного турнира")
+        raise NoActiveTournamentError("no tournament is running right now")
     return view
 
 
@@ -169,7 +175,7 @@ async def _active_or_last(session: AsyncSession, group_id: uuid.UUID) -> Tournam
         return view
     recent = await list_tournaments(session, group_id, limit=1)
     if not recent:
-        raise ServiceError("Турниров ещё не было")
+        raise NoTournamentsYetError("no tournaments have been played yet")
     return await get_tournament(session, recent[0].id)
 
 
@@ -209,7 +215,7 @@ async def _accept_invite(session: AsyncSession, message: Message, token: str) ->
     try:
         player = await redeem_invite(session, token, await _actor(session, message))
     except ServiceError as exc:
-        await message.reply(str(exc))
+        await message.reply(say(exc))
         return
     await message.reply(f"Готово — теперь вы играете как <b>{player.name}</b>")
 
@@ -275,7 +281,7 @@ async def on_press(query: CallbackQuery, session: AsyncSession, bot: Bot) -> Non
     except (PadelEngineError, ServiceError) as exc:
         # These messages are written for people. Show the reason, then put the screen back
         # in step with what is actually stored.
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(say(exc), show_alert=True)
         view = await active_tournament(session, group_id)
         if view is not None:
             await _paint(

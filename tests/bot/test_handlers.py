@@ -14,7 +14,9 @@ import pytest
 from conftest import NAMES
 from padel_tour.bot import handlers, screens
 from padel_tour.bot.callbacks import Action, Callback, Screen, plain, points, show, toggle, winner
+from padel_tour.bot.wording import say
 from padel_tour.db import PROVIDER_TELEGRAM, Tournament
+from padel_tour.faults import CodedError
 from padel_tour.services import (
     active_tournament,
     add_player,
@@ -147,8 +149,10 @@ async def press(
         rendered, tournament_id, note = await handlers._dispatch(
             session, parsed, chat_id, group_id, actor
         )
-    except Exception as exc:
-        await query.answer(str(exc), show_alert=True)
+    except CodedError as exc:
+        # Mirrors what on_callback does: the alert a person sees is Russian, not the
+        # English the exception carries.
+        await query.answer(say(exc), show_alert=True)
         return query
 
     await query.answer(note or None)

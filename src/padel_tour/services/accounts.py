@@ -109,7 +109,7 @@ async def request_magic_link(
         .limit(1)
     )
     if recent is not None:
-        raise TooManyRequestsError("Письмо уже отправлено — проверьте почту")
+        raise TooManyRequestsError("a link is already on its way — check your inbox")
 
     raw, hashed = issue()
     session.add(MagicLink(email=address, token_hash=hashed, expires_at=utc_now() + MAGIC_LINK_TTL))
@@ -124,9 +124,9 @@ async def redeem_magic_link(session: AsyncSession, raw_token: str) -> Account:
         select(MagicLink).where(MagicLink.token_hash == hash_token(raw_token))
     )
     if link is None or link.used_at is not None:
-        raise InvalidTokenError("Ссылка недействительна — запросите новую")
+        raise InvalidTokenError("this link is not valid — ask for a new one")
     if link.expires_at <= utc_now():
-        raise TokenExpiredError("Ссылка устарела — запросите новую")
+        raise TokenExpiredError("this link has expired — ask for a new one")
 
     link.used_at = utc_now()
     await session.flush()

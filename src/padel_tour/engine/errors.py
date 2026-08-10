@@ -6,9 +6,15 @@ caller (bot, API, CLI) can catch that one type and show the message to a human.
 
 from __future__ import annotations
 
+from padel_tour.faults import CodedError
 
-class PadelEngineError(Exception):
-    """Base class for every error the engine raises."""
+
+class PadelEngineError(CodedError):
+    """Base class for every error the engine raises.
+
+    :class:`~padel_tour.faults.CodedError` is a plain helper with no dependencies of its own, so
+    the engine stays what it is: rules and nothing else.
+    """
 
 
 class InvalidConfigError(PadelEngineError):

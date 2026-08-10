@@ -58,7 +58,7 @@ async def create_invite(session: AsyncSession, actor: Account | None, player_id:
     await require_owner(session, actor, player.group_id)
 
     if player.account_id is not None:
-        raise PlayerAlreadyClaimedError(f"{player.name} уже занят(а)")
+        raise PlayerAlreadyClaimedError(f"{player.name} is already claimed", name=player.name)
 
     raw, hashed = issue()
     session.add(
@@ -88,7 +88,7 @@ async def redeem_invite(session: AsyncSession, raw_token: str, account: Account)
     invite, player = await _load(session, raw_token)
 
     if player.account_id is not None:
-        raise PlayerAlreadyClaimedError(f"{player.name} уже занят(а)")
+        raise PlayerAlreadyClaimedError(f"{player.name} is already claimed", name=player.name)
 
     already = await session.scalar(
         select(Player).where(
@@ -98,7 +98,9 @@ async def redeem_invite(session: AsyncSession, raw_token: str, account: Account)
         )
     )
     if already is not None:
-        raise AlreadyPlayingHereError(f"В этой группе вы уже {already.name}")
+        raise AlreadyPlayingHereError(
+            f"in this group you already play as {already.name}", name=already.name
+        )
 
     player.account_id = account.id
     invite.used_at = utc_now()
@@ -109,13 +111,13 @@ async def redeem_invite(session: AsyncSession, raw_token: str, account: Account)
 async def _load(session: AsyncSession, raw_token: str) -> tuple[Invite, Player]:
     invite = await session.scalar(select(Invite).where(Invite.token_hash == hash_token(raw_token)))
     if invite is None:
-        raise InviteNotFoundError("Приглашение не найдено")
+        raise InviteNotFoundError("no such invitation")
     if invite.used_at is not None:
-        raise InviteUsedError("Приглашение уже использовано")
+        raise InviteUsedError("this invitation has already been accepted")
     if invite.expires_at <= utc_now():
-        raise InviteNotFoundError("Приглашение устарело — попросите новое")
+        raise InviteNotFoundError("this invitation has expired — ask for a new one")
 
     player = await session.get(Player, invite.player_id)
     if player is None:  # pragma: no cover - the foreign key prevents it
-        raise PlayerNotFoundError("Игрок больше не существует")
+        raise PlayerNotFoundError("that player no longer exists")
     return invite, player

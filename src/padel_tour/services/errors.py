@@ -7,8 +7,10 @@ exists, whether this player belongs to it, whether a tournament is already runni
 
 from __future__ import annotations
 
+from padel_tour.faults import CodedError
 
-class ServiceError(Exception):
+
+class ServiceError(CodedError):
     """Base class for every service-layer error."""
 
 
@@ -77,7 +79,44 @@ class TooManyRequestsError(ServiceError):
 
 
 class ForbiddenError(ServiceError):
-    """Signed in, but not allowed to do this."""
+    """Signed in, but not allowed to do this.
+
+    Subclassed rather than raised directly, because the code is what an interface has to
+    translate, and one code for every refusal would collapse "you are not in this group"
+    and "you did not play this match" into the same unhelpful sentence.
+    """
+
+
+class NotAMemberError(ForbiddenError):
+    """Not in this group."""
+
+
+class NotTheOwnerError(ForbiddenError):
+    """Only the group's owner keeps its roster."""
+
+
+class NotTheOrganiserError(ForbiddenError):
+    """Only whoever started this tournament can end or redraw it."""
+
+
+class NotOnThisCourtError(ForbiddenError):
+    """A known player of this tournament, but not one of the four who played this match."""
+
+
+class NoActiveTournamentError(ServiceError):
+    """Nothing is being played in this group right now."""
+
+
+class NoTournamentsYetError(ServiceError):
+    """This group has never played."""
+
+
+class UnidentifiedCallerError(ServiceError):
+    """There is nobody to attribute this to.
+
+    A channel post has no sender. Passing "nobody" downstream would read as *system*, which
+    skips every permission check, so it stops here instead.
+    """
 
 
 class NotSignedInError(AuthError):

@@ -25,7 +25,11 @@ from padel_tour.db import Group, Player, Tournament, TournamentPlayer
 from .errors import (
     ForbiddenError,
     GroupNotFoundError,
+    NotAMemberError,
+    NotOnThisCourtError,
     NotSignedInError,
+    NotTheOrganiserError,
+    NotTheOwnerError,
     TournamentNotFoundError,
 )
 
@@ -83,7 +87,7 @@ def _identified(actor: Actor) -> Account:
     is a programming error rather than a stranger — and both are better refused than trusted.
     """
     if actor is None or isinstance(actor, Anonymous):
-        raise NotSignedInError("Войдите, чтобы это увидеть")
+        raise NotSignedInError("sign in to see this")
     return actor
 
 
@@ -113,7 +117,7 @@ async def require_member(session: AsyncSession, actor: Actor, group_id: uuid.UUI
     if group.owner_account_id is None:
         return
     if not await is_member(session, account, group_id):
-        raise ForbiddenError("Вы не состоите в этой группе")
+        raise NotAMemberError("you are not a member of this group")
 
 
 async def require_owner(session: AsyncSession, actor: Actor, group_id: uuid.UUID) -> None:
@@ -128,7 +132,7 @@ async def require_owner(session: AsyncSession, actor: Actor, group_id: uuid.UUID
     if group.owner_account_id is None:
         return
     if group.owner_account_id != account.id:
-        raise ForbiddenError("Это может сделать только владелец группы")
+        raise NotTheOwnerError("only the group owner can do this")
 
 
 async def require_organiser(session: AsyncSession, actor: Actor, tournament_id: uuid.UUID) -> None:
@@ -147,7 +151,7 @@ async def require_organiser(session: AsyncSession, actor: Actor, tournament_id: 
     group = await session.get(Group, tournament.group_id)
     if group is not None and group.owner_account_id == account.id:
         return
-    raise ForbiddenError("Это может сделать только тот, кто начал турнир")
+    raise NotTheOrganiserError("only whoever started this tournament can do this")
 
 
 async def require_can_score(
@@ -182,7 +186,9 @@ async def require_can_score(
     if plays_as is None:
         return
     if plays_as not in players_on_court:
-        raise ForbiddenError("Счёт вносит тот, кто играл этот матч, или организатор")
+        raise NotOnThisCourtError(
+            "scores are entered by whoever played the match, or the organiser"
+        )
 
 
 async def _plays_as(

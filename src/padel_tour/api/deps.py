@@ -12,11 +12,12 @@ from collections.abc import AsyncIterator
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import Cookie, Depends, HTTPException, Request, status
+from fastapi import Cookie, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from padel_tour.db import Account, create_engine, create_session_factory, database_url
 from padel_tour.services import account_for_session
+from padel_tour.services.errors import NotSignedInError
 from padel_tour.services.permissions import ANONYMOUS, Anonymous
 
 logger = logging.getLogger(__name__)
@@ -100,8 +101,15 @@ CurrentAccount = Annotated[Account | Anonymous, Depends(current_account)]
 
 
 async def require_account(actor: CurrentAccount) -> Account:
+    """The account behind this request, or a refusal.
+
+    Raises the service layer's error rather than an ``HTTPException`` so that every refusal
+    in this API looks the same on the wire. An ``HTTPException`` here would answer 401 with
+    a bare ``detail`` and no code, and a page trying to translate it would have exactly one
+    message it could not — the one it shows most often.
+    """
     if isinstance(actor, Anonymous):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Нужно войти")
+        raise NotSignedInError("sign in first")
     return actor
 
 

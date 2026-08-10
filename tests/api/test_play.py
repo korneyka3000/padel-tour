@@ -341,3 +341,65 @@ async def test_editing_the_roster_needs_an_account(
     )
 
     assert response.status_code == 401
+
+
+# --------------------------------------------------------------------------- refusals
+
+
+async def test_a_refusal_carries_a_code_the_page_can_translate(
+    client: AsyncClient, mailer: InMemoryMailer, factory: async_sessionmaker[AsyncSession]
+) -> None:
+    """English in `detail` for the log, a code for the interface.
+
+    Without the code a Russian page can only show the English sentence, and the alternative
+    — matching on the sentence itself — breaks the first time somebody rewords it.
+    """
+    await sign_in(client, mailer)
+    group_id, players = await make_group(factory)
+    drawn = await draw(client, group_id, players)
+    await client.post("/api/auth/sign-out")
+
+    refused = await client.put(
+        f"/api/tournaments/{drawn['id']}/rounds/1/courts/1", json={"score_a": 17, "score_b": 7}
+    )
+
+    assert refused.status_code == 401
+    assert refused.json()["code"] == "not_signed_in"
+
+
+async def test_a_refusal_hands_over_the_words_it_was_built_from(
+    client: AsyncClient, mailer: InMemoryMailer, factory: async_sessionmaker[AsyncSession]
+) -> None:
+    """A name inside an English sentence is unusable; beside it, a client can decline it."""
+    await sign_in(client, mailer)
+    _, players = await make_group(factory)
+    invited = await client.post(f"/api/players/{players[0]}/invite")
+    token = invited.json()["token"]
+    await client.post("/api/invites/redeem", json={"token": token})
+
+    again = await client.post(f"/api/players/{players[0]}/invite")
+
+    assert again.status_code == 409
+    assert again.json()["code"] == "player_already_claimed"
+    assert again.json()["params"] == {"name": "Аня"}
+
+
+async def test_the_four_ways_to_be_refused_do_not_share_one_code(
+    client: AsyncClient, mailer: InMemoryMailer, factory: async_sessionmaker[AsyncSession]
+) -> None:
+    """ "You are not in this group" and "you did not play this match" are different things
+    to be told, and one `forbidden` for both would tell nobody anything."""
+    await sign_in(client, mailer)
+    group_id, players = await make_group(factory)
+    drawn = await draw(client, group_id, players)
+
+    await sign_in(client, mailer, "stranger@example.com")
+    outsider = await client.get(f"/api/groups/{group_id}")
+    scoring = await client.put(
+        f"/api/tournaments/{drawn['id']}/rounds/1/courts/1", json={"score_a": 17, "score_b": 7}
+    )
+
+    assert outsider.status_code == 403
+    assert outsider.json()["code"] == "not_a_member"
+    assert scoring.status_code == 403
+    assert scoring.json()["code"] == "not_a_member"

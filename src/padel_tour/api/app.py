@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from padel_tour.engine import PadelEngineError
+from padel_tour.faults import CodedError
 from padel_tour.services import (
     ConflictError,
     ForbiddenError,
@@ -67,40 +68,48 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    def body(exc: CodedError) -> dict[str, object]:
+        """What every refusal looks like on the wire.
+
+        ``detail`` is English, for the log and for a client that has never heard of this
+        code. ``code`` and ``params`` are what a Russian interface needs in order to say
+        the same thing — the sentence is the client's to build, ours only to mean.
+        """
+        return {"detail": str(exc), "code": exc.code, "params": exc.params}
+
     @app.exception_handler(NotFoundError)
     async def _not_found(_: Request, exc: NotFoundError) -> JSONResponse:
-        return JSONResponse(status_code=404, content={"detail": str(exc)})
+        return JSONResponse(status_code=404, content=body(exc))
 
     @app.exception_handler(NotSignedInError)
     async def _unauthenticated(_: Request, exc: NotSignedInError) -> JSONResponse:
         # 401 rather than 403: this one is answered by signing in, not by asking somebody
         # for an invitation, and the web app routes on that difference.
-        return JSONResponse(status_code=401, content={"detail": str(exc)})
+        return JSONResponse(status_code=401, content=body(exc))
 
     @app.exception_handler(ForbiddenError)
     async def _forbidden(_: Request, exc: ForbiddenError) -> JSONResponse:
         # 403 rather than 404. An id is a UUIDv7 and cannot be guessed, so hiding existence
         # buys nothing; meanwhile "ask for an invitation" is actionable where "broken link"
         # is a dead end and a lie.
-        return JSONResponse(status_code=403, content={"detail": str(exc)})
+        return JSONResponse(status_code=403, content=body(exc))
 
     @app.exception_handler(TooManyRequestsError)
     async def _too_many(_: Request, exc: TooManyRequestsError) -> JSONResponse:
-        return JSONResponse(status_code=429, content={"detail": str(exc)})
+        return JSONResponse(status_code=429, content=body(exc))
 
     @app.exception_handler(ConflictError)
     async def _conflict(_: Request, exc: ConflictError) -> JSONResponse:
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
+        return JSONResponse(status_code=409, content=body(exc))
 
     @app.exception_handler(ServiceError)
     async def _service(_: Request, exc: ServiceError) -> JSONResponse:
-        return JSONResponse(status_code=400, content={"detail": str(exc)})
+        return JSONResponse(status_code=400, content=body(exc))
 
     @app.exception_handler(PadelEngineError)
     async def _engine(_: Request, exc: PadelEngineError) -> JSONResponse:
-        # Engine messages name the round, the court, the score that was wrong. They are
-        # written for a person and are safe to pass straight through.
-        return JSONResponse(status_code=400, content={"detail": str(exc)})
+        # Engine messages name the round, the court, the score that was wrong.
+        return JSONResponse(status_code=400, content=body(exc))
 
     app.include_router(router)
     app.include_router(auth_router)
