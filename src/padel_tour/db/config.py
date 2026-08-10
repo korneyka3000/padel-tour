@@ -6,11 +6,13 @@ One knob: ``DATABASE_URL``. Unset means a local SQLite file, which is what makes
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
+from padel_tour.settings import DEFAULT_SQLITE_PATH as _DEFAULT_SQLITE_NAME
+from padel_tour.settings import settings
+
 #: Local database file used when ``DATABASE_URL`` is unset.
-DEFAULT_SQLITE_PATH = Path("padel.db")
+DEFAULT_SQLITE_PATH = Path(_DEFAULT_SQLITE_NAME)
 
 _ASYNC_DRIVERS = {
     "postgresql": "postgresql+asyncpg",
@@ -45,7 +47,7 @@ def normalise_url(url: str) -> str:
 
 def database_url() -> str:
     """The async database URL for this process."""
-    configured = os.environ.get("DATABASE_URL", "").strip()
+    configured = settings().database_url.strip()
     if configured:
         return normalise_url(configured)
     return f"sqlite+aiosqlite:///{DEFAULT_SQLITE_PATH}"

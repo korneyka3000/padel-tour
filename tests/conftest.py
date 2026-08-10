@@ -7,13 +7,14 @@ is what catches the places where the two dialects disagree.
 
 from __future__ import annotations
 
-import os
 from typing import TYPE_CHECKING
 
 import pytest
 
+from padel_tour import settings as padel_settings
 from padel_tour.db import create_all, create_engine, create_session_factory, drop_all
 from padel_tour.db.config import normalise_url
+from padel_tour.settings import settings
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -21,8 +22,19 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 
+@pytest.fixture(autouse=True)
+def _no_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The suite must not read the developer's ``.env``.
+
+    That file holds a real bot token and a real database URL. A test run that picks them up
+    is a test run that can reach production by accident — and it would do it quietly, on a
+    machine where everything looks fine.
+    """
+    monkeypatch.setattr(padel_settings, "ENV_FILE", None)
+
+
 def configured_database_url() -> str:
-    configured = os.environ.get("TEST_DATABASE_URL", "").strip()
+    configured = settings().test_database_url.strip()
     return normalise_url(configured) if configured else "sqlite+aiosqlite:///:memory:"
 
 

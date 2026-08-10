@@ -1,0 +1,93 @@
+"""Everything this process reads from its environment, in one typed object.
+
+Before this there were ten ``os.environ.get`` calls in six modules. Nothing declared what
+the application actually needs, nothing validated it, and a typo in a variable name fell
+silently through to a default — which for ``SMTP_HOST`` means "development", so a
+misspelled production setting looks exactly like no setting at all.
+
+**Read at call time, not at import, and not cached.** An object built during import would
+freeze whatever the shell happened to hold, and a cached one goes stale the moment a test
+moves a variable underneath it. Building one costs about 110 microseconds — measured, not
+assumed — against one to three calls per request, so caching would buy half a millisecond
+and cost a whole class of bug where the environment says one thing and the process believes
+another.
+"""
+
+from __future__ import annotations
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: Local database file used when ``DATABASE_URL`` is unset. A fresh checkout runs with no
+#: setup at all, which is the point.
+DEFAULT_SQLITE_PATH = "padel.db"
+
+#: Where the Vite dev server lives. The default for a checkout nobody has deployed.
+DEFAULT_BASE_URL = "http://localhost:5173"
+
+DEFAULT_SMTP_PORT = 587
+
+#: Which dotenv file to read, or ``None`` for none at all.
+#:
+#: A module-level knob rather than a constructor argument because the tests have to turn it
+#: off, and they must. A developer's ``.env`` holds a real bot token and a real database
+#: URL; a suite that reads it is a suite that can reach production by accident. The bot was
+#: the only thing loading ``.env`` before this module existed, so nothing else regresses by
+#: making the file explicit here.
+ENV_FILE: str | None = ".env"
+
+
+class Settings(BaseSettings):
+    """The environment, declared.
+
+    Defaults describe a fresh checkout: SQLite in a file, mail to the log, no bot. Anything
+    that must be set to run in production is checked where it is used, with a message
+    naming the variable — a validation error at import would take the whole app down for a
+    missing bot token that only the bot needs.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file_encoding="utf-8",
+        extra="ignore",
+        # Vercel and Docker hand us plenty of variables that are not ours.
+        case_sensitive=False,
+    )
+
+    database_url: str = ""
+    #: Only tests set this. Unset means the suite runs on in-memory SQLite.
+    test_database_url: str = ""
+
+    bot_token: str = ""
+    telegram_webhook_secret: str = ""
+
+    smtp_host: str = ""
+    smtp_port: int = DEFAULT_SMTP_PORT
+    smtp_user: str = ""
+    smtp_password: str = ""
+    mail_from: str = ""
+
+    public_base_url: str = ""
+    #: Set by the platform, not by us. The fallback that makes a first deploy work before
+    #: anybody has thought about ``PUBLIC_BASE_URL``.
+    vercel_project_production_url: str = Field(default="")
+
+    @property
+    def sender(self) -> str:
+        """Who mail comes from. Gmail rewrites a From that is not the account, so default
+        to the account rather than to something that would be silently replaced."""
+        return self.mail_from or self.smtp_user
+
+
+def settings() -> Settings:
+    """The environment as it stands right now."""
+    return Settings(_env_file=ENV_FILE)
+
+
+__all__ = [
+    "DEFAULT_BASE_URL",
+    "DEFAULT_SMTP_PORT",
+    "DEFAULT_SQLITE_PATH",
+    "ENV_FILE",
+    "Settings",
+    "settings",
+]

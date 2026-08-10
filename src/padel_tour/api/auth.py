@@ -11,7 +11,6 @@ the service layer rather than here.
 
 from __future__ import annotations
 
-import os
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, Request, Response, status
@@ -26,6 +25,7 @@ from padel_tour.services import (
     request_magic_link,
 )
 from padel_tour.services.mail import Mailer, mailer_from_env
+from padel_tour.settings import DEFAULT_BASE_URL, settings
 
 from .deps import API_PREFIX, SESSION_COOKIE, RequiredAccount, Session
 from .schemas import Group
@@ -34,9 +34,6 @@ router = APIRouter(prefix=f"{API_PREFIX}/auth", tags=["auth"])
 
 #: How long the cookie lasts, matching the session row behind it.
 SESSION_MAX_AGE = 30 * 24 * 60 * 60
-
-#: Where the web app runs when nothing says otherwise: the Vite dev server.
-DEFAULT_BASE_URL = "http://localhost:5173"
 
 #: The page a sign-in link lands on.
 ENTER_PATH = "/auth/enter"
@@ -50,11 +47,12 @@ def base_url() -> str:
     once there is a real domain — the platform's variable follows the project, not the
     address people actually type.
     """
-    configured = os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    current = settings()
+    configured = current.public_base_url.strip().rstrip("/")
     if configured:
         return configured
 
-    platform = os.environ.get("VERCEL_PROJECT_PRODUCTION_URL", "").strip().rstrip("/")
+    platform = current.vercel_project_production_url.strip().rstrip("/")
     if platform:
         return platform if "://" in platform else f"https://{platform}"
 

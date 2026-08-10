@@ -11,7 +11,6 @@ because a provider is having a bad day.
 from __future__ import annotations
 
 import logging
-import os
 import smtplib
 from dataclasses import dataclass, field
 from email.message import EmailMessage
@@ -19,9 +18,9 @@ from typing import Protocol, runtime_checkable
 
 from asyncer import asyncify
 
-logger = logging.getLogger(__name__)
+from padel_tour.settings import settings
 
-DEFAULT_SMTP_PORT = 587
+logger = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -112,16 +111,17 @@ def mailer_from_env() -> Mailer:
 
     No SMTP host configured means development, and development gets the log.
     """
-    host = os.environ.get("SMTP_HOST", "").strip()
+    current = settings()
+    host = current.smtp_host.strip()
     if not host:
         return LoggingMailer()
 
     return SmtpMailer(
         SmtpConfig(
             host=host,
-            port=int(os.environ.get("SMTP_PORT", DEFAULT_SMTP_PORT)),
-            user=os.environ.get("SMTP_USER", ""),
-            password=os.environ.get("SMTP_PASSWORD", ""),
-            sender=os.environ.get("MAIL_FROM", os.environ.get("SMTP_USER", "")),
+            port=current.smtp_port,
+            user=current.smtp_user,
+            password=current.smtp_password,
+            sender=current.sender,
         )
     )

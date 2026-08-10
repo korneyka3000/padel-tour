@@ -23,8 +23,8 @@ dependencies = [
     # Without it the API imports fine in development, where a dev dependency happens to
     # pull email-validator in, and dies on import in production, which installs runtime
     # dependencies only. It did exactly that once.
+    "pydantic-settings>=2.7",
     "pydantic[email]>=2.10",
-    "python-dotenv>=1.0",
     "sqlalchemy[asyncio]>=2.0.36",
     "typer>=0.15",
 ]

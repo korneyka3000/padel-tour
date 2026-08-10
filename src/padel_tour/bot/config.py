@@ -1,19 +1,15 @@
-"""Bot configuration, read from the environment.
+"""Bot configuration.
 
-``.env`` is loaded if present, which is what makes running the bot locally a one-liner. In
-deployment the variables come from the environment proper and no ``.env`` exists.
+``.env`` is read by :mod:`padel_tour.settings`, which is what makes running the bot locally
+a one-liner. In deployment the variables come from the environment proper and no ``.env``
+exists.
 """
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-from dotenv import load_dotenv
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from padel_tour.settings import settings
 
 
 class MissingTokenError(RuntimeError):
@@ -31,11 +27,9 @@ class BotConfig:
         return f"{head}:…"
 
 
-def load_config(env_file: Path | None = None) -> BotConfig:
-    """Read the bot's settings, loading ``.env`` first if it is there."""
-    load_dotenv(env_file, override=False)
-
-    token = os.environ.get("BOT_TOKEN", "").strip()
+def load_config() -> BotConfig:
+    """Read the bot's settings."""
+    token = settings().bot_token.strip()
     if not token:
         raise MissingTokenError(
             "BOT_TOKEN is not set — create a bot with @BotFather and put the token in .env"

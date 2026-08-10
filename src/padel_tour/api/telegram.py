@@ -11,7 +11,6 @@ given when the webhook was registered.
 from __future__ import annotations
 
 import logging
-import os
 from functools import lru_cache
 from typing import Annotated, Any
 
@@ -24,6 +23,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 from padel_tour.bot.config import MissingTokenError, load_config
 from padel_tour.bot.handlers import router as bot_router
 from padel_tour.bot.middleware import SessionMiddleware
+from padel_tour.settings import settings
 
 from .deps import session_factory
 from .routes import API_PREFIX
@@ -37,7 +37,7 @@ SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"  # noqa: S105 - a header name
 
 
 def webhook_secret() -> str:
-    return os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
+    return settings().telegram_webhook_secret.strip()
 
 
 @lru_cache(maxsize=1)
