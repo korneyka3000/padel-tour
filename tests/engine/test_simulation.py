@@ -12,6 +12,7 @@ from conftest import americano, mexicano, partner_counts, play_round
 from padel_tour.engine import (
     PairingPattern,
     TournamentState,
+    finish,
     is_played_out,
     next_round,
     progression,
@@ -80,10 +81,12 @@ def test_full_americano(size: int) -> None:
 
 @pytest.mark.parametrize("pattern", list(PairingPattern))
 def test_full_mexicano(pattern: PairingPattern) -> None:
+    """Every round played, and still open — a Mexicano waits to be told it is over."""
     state = play_out_mexicano(8, seed=13, rounds=6, pattern=pattern)
-    assert is_played_out(state)
-    assert state.finished
-    assert_invariants(state)
+    assert not is_played_out(state)
+    assert not state.finished
+    assert len(state.rounds) == state.total_rounds
+    assert_invariants(finish(state))
 
 
 def test_mexicano_courts_always_hold_adjacent_ranks() -> None:

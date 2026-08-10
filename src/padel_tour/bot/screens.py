@@ -218,10 +218,18 @@ def _match_lines(rnd: RoundView) -> list[str]:
 
 
 def round_screen(view: TournamentView) -> Rendered:
-    """The live screen: what is being played and where to put the scores."""
+    """The live screen: what is being played and where to put the scores.
+
+    A Mexicano that has played its last planned round lands here with nothing left to draw
+    and no automatic ending — the count was the organiser's plan, not the format's rule —
+    so this is where "one more?" gets asked.
+    """
     rnd = view.next_unfinished_round or view.current_round
     if rnd is None:
         return table_screen(view)
+
+    if _plan_used_up(view):
+        return _plan_done_screen(view)
 
     lines = [
         f"<b>Раунд {rnd.number} из {view.total_rounds}</b>",
@@ -240,6 +248,32 @@ def round_screen(view: TournamentView) -> Rendered:
             )
         )
     builder.row(*_nav(("📊 Таблица", show(Screen.TABLE)), ("📈 График", show(Screen.CHART))))
+    return "\n".join(lines), builder.as_markup()
+
+
+def _plan_used_up(view: TournamentView) -> bool:
+    """Every planned round drawn and played, and the tournament still open."""
+    return (
+        view.format is Format.MEXICANO
+        and not view.finished
+        and len(view.rounds) >= view.total_rounds
+        and all(rnd.complete for rnd in view.rounds)
+    )
+
+
+def _plan_done_screen(view: TournamentView) -> Rendered:
+    """The fork at the end of a Mexicano: one more, or that is the evening."""
+    leader = view.standings[0]
+    lines = [
+        f"<b>Сыграно {view.total_rounds} из {view.total_rounds}</b>",
+        "",
+        f"Впереди <b>{esc(leader.name)}</b> — {leader.points_for}.",
+        "Играем ещё раунд или заканчиваем?",
+    ]
+
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="➕ Ещё раунд", callback_data=plain(Action.EXTEND)))
+    builder.row(*_nav(("📊 Таблица", show(Screen.TABLE)), ("🏁 Завершить", confirm(Action.FINISH))))
     return "\n".join(lines), builder.as_markup()
 
 

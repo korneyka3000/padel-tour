@@ -27,6 +27,7 @@ from padel_tour.services import (
     advance_round,
     create_group,
     ensure_identity,
+    extend_tournament,
     finish_tournament,
     get_tournament,
     group_for_link,
@@ -401,6 +402,11 @@ async def _lifecycle_action(
             active = await _require_active(session, group_id)
             view = await advance_round(session, active.id, actor=actor)
             return screens.round_screen(view), view.id, ""
+        case Action.EXTEND:
+            active = await _require_active(session, group_id)
+            view = await extend_tournament(session, active.id, actor=actor)
+            view = await advance_round(session, view.id, actor=actor)
+            return screens.round_screen(view), view.id, "Ещё раунд"
     return None
 
 

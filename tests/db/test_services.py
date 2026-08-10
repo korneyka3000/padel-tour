@@ -305,8 +305,13 @@ async def test_each_mexicano_round_is_stored_as_it_is_drawn(
         if number < 3:
             view = await advance_round(session, view.id)
 
-    assert view.finished
+    # Still open: a Mexicano's round count is the organiser's plan, and reaching it is not
+    # the same as being done. Ending it is a decision somebody makes.
+    assert not view.finished
     assert len((await get_tournament(session, view.id)).rounds) == 3
+
+    view = await finish_tournament(session, view.id)
+    assert view.finished
 
 
 async def test_mexicano_pairs_the_leaders_together(

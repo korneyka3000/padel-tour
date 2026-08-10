@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from random import Random
 
 import pytest
@@ -18,6 +17,7 @@ from padel_tour.engine import (
     TournamentFinishedError,
     WrongFormatError,
     create_mexicano,
+    extend,
     finish,
     next_round,
     ranked_players,
@@ -85,25 +85,48 @@ def test_leaders_share_the_first_court() -> None:
     assert set(drawn.matches[1].players()) == set(order[4:])
 
 
-def test_the_last_round_ends_the_tournament() -> None:
-    """Scoring the final planned round finishes it — there is nothing left to draw."""
+def test_the_last_round_does_not_end_the_tournament() -> None:
+    """A Mexicano's round count is a plan, not a rule.
+
+    Reaching it means the plan is done, not the padel. Closing the tournament the instant
+    the last score went in would take "shall we play one more" away at exactly the moment
+    it gets asked — see :func:`padel_tour.engine.extend`.
+    """
     state = mexicano(8, rounds=2)
     state = play_round(state, 1, Random(1))
     state = next_round(state)
     state = play_round(state, 2, Random(2))
-    assert state.finished
-    with pytest.raises(TournamentFinishedError):
+
+    assert not state.finished
+    with pytest.raises(NoMoreRoundsError, match="all 2 rounds"):
         next_round(state)
 
 
-def test_round_budget_is_enforced_independently_of_the_finished_flag() -> None:
-    """Auto-finish normally gets there first; this guards the count on its own."""
+def test_one_more_round_can_be_planned_after_the_last_one() -> None:
     state = mexicano(8, rounds=2)
     state = play_round(state, 1, Random(1))
     state = next_round(state)
     state = play_round(state, 2, Random(2))
-    with pytest.raises(NoMoreRoundsError, match="all 2 rounds"):
-        next_round(replace(state, finished=False))
+
+    state = next_round(extend(state))
+
+    assert len(state.rounds) == 3
+
+
+def test_an_americano_refuses_an_extra_round() -> None:
+    """Not a missing feature. Every pair partners exactly once over n-1 rounds, and a
+    twelfth round for eleven would have to repeat one — the format's single promise."""
+    state = americano(8)
+
+    with pytest.raises(WrongFormatError):
+        extend(state)
+
+
+def test_a_finished_tournament_takes_no_more_rounds() -> None:
+    state = mexicano(8, rounds=2)
+
+    with pytest.raises(TournamentFinishedError):
+        extend(finish(state))
 
 
 def test_next_round_after_finish_is_refused() -> None:

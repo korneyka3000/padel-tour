@@ -24,6 +24,7 @@ from padel_tour.services import (
     TournamentView,
     advance_round,
     amend_score,
+    extend_tournament,
     finish_tournament,
     get_tournament,
     record_score,
@@ -142,6 +143,15 @@ async def next_round(
 ) -> Tournament:
     """Draw the next Mexicano round from the standing as it now is."""
     view = await advance_round(session, tournament_id, actor=actor)
+    return await _rendered(session, view, actor)
+
+
+@router.post("/tournaments/{tournament_id}/rounds")
+async def add_round(
+    tournament_id: uuid.UUID, session: Session, actor: RequiredAccount
+) -> Tournament:
+    """Plan one more round. Mexicano only — an Americano's length is its format."""
+    view = await extend_tournament(session, tournament_id, actor=actor)
     return await _rendered(session, view, actor)
 
 

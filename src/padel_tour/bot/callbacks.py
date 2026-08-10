@@ -54,6 +54,8 @@ class Action(StrEnum):
     POINTS = "pts"
     #: Draw the next Mexicano round.
     ADVANCE = "next"
+    #: Plan one more round than was agreed at the start.
+    EXTEND = "more"
     #: End the tournament where it stands.
     FINISH = "fin"
     #: Ask before something irreversible: ``ask:fin``

@@ -203,6 +203,9 @@ async def test_the_archive_survives_a_reload(
                 await record_score(
                     session, view.id, round_no=1, court=match.court, score_a=14, score_b=10
                 )
+            # A Mexicano no longer ends itself, and a group cannot start a second tournament
+            # while one is still open — so ending it is part of playing one now.
+            await finish_tournament(session, view.id)
         await session.commit()
 
     async with factory() as session:

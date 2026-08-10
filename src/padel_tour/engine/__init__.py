@@ -53,6 +53,7 @@ from .models import (
 from .standings import progression, ranked_players, standings
 from .tournament import (
     amend_result,
+    extend,
     finish,
     is_played_out,
     pending_matches,
@@ -90,6 +91,7 @@ __all__ = [
     "amend_result",
     "create_americano",
     "create_mexicano",
+    "extend",
     "finish",
     "is_played_out",
     "next_round",

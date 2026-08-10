@@ -10,11 +10,13 @@ from random import Random
 
 from .americano import create_americano
 from .errors import (
+    InvalidConfigError,
     InvalidScoreError,
     RerollTooLateError,
     ResultAlreadyRecordedError,
     TournamentFinishedError,
     UnknownMatchError,
+    WrongFormatError,
 )
 from .mexicano import create_mexicano
 from .models import Format, Match, MatchResult, Round, TournamentState
@@ -117,8 +119,35 @@ def amend_result(
 
 
 def is_played_out(state: TournamentState) -> bool:
-    """True when every planned round has been drawn and every match scored."""
+    """True when the tournament has run its course and should end by itself.
+
+    Only an Americano does. Its ``n - 1`` rounds are the format — every pair partners once,
+    and there is no such thing as an extra round without repeating a partnership. A
+    Mexicano's round count is the organiser's plan, not a rule, so reaching it means the
+    plan is done, not the padel: they may well want one more, and a tournament that closed
+    itself the instant the last score went in would have taken that decision away at exactly
+    the wrong moment.
+    """
+    if state.config.format is not Format.AMERICANO:
+        return False
     return len(state.rounds) >= state.total_rounds and all(rnd.complete for rnd in state.rounds)
+
+
+def extend(state: TournamentState, by: int = 1) -> TournamentState:
+    """Plan another round.
+
+    Mexicano only, and not because of a missing feature: an Americano plays a whist design
+    in which every pair partners exactly once over ``n - 1`` rounds. A twelfth round for
+    eleven would have to repeat a partnership, which is the one thing the format promises
+    not to do.
+    """
+    if state.config.format is not Format.MEXICANO:
+        raise WrongFormatError("an Americano plays a fixed n-1 rounds; there is no extra one")
+    if state.finished:
+        raise TournamentFinishedError("the tournament is over — no more rounds")
+    if by < 1:
+        raise InvalidConfigError(f"a tournament grows by at least one round, got {by}")
+    return replace(state, total_rounds=state.total_rounds + by)
 
 
 def finish(state: TournamentState) -> TournamentState:

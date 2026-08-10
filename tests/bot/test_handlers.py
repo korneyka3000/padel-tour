@@ -32,6 +32,8 @@ if TYPE_CHECKING:
     from aiogram.types import InlineKeyboardMarkup
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from padel_tour.services import RoundView
+
 CHAT_ID = -100500
 ORGANISER = 4242
 BYSTANDER = 777
@@ -527,3 +529,35 @@ def test_rendered_screens_always_carry_a_keyboard() -> None:
     text, markup = screens.home("Клуб", [])
     assert text
     assert markup.inline_keyboard
+
+
+# --------------------------------------------------------------------------- one more
+
+
+async def test_a_played_out_mexicano_offers_another_round(
+    session: AsyncSession, bot: FakeBot
+) -> None:
+    """The fork at the end of the plan, which is where "one more?" actually gets asked."""
+    group_id = await seeded_group(session)
+    await press(session, bot, show(Screen.ROSTER))
+    for player in await list_players(session, group_id):
+        await press(session, bot, toggle(player.id))
+    await press(session, bot, show(Screen.SETUP))
+    await press(session, bot, Callback(Action.SETTING, "fmt", "mexicano").pack())
+    await press(session, bot, plain(Action.BEGIN))
+
+    view = await active_tournament(session, group_id)
+    assert view is not None
+    for number in range(1, view.total_rounds + 1):
+        for match in (await _round_of(session, group_id, number)).matches:
+            await press(session, bot, Callback(Action.COURT, str(match.court)).pack())
+            await press(session, bot, winner("a"))
+            await press(session, bot, points(17))
+
+    assert "➕ Ещё раунд" in bot.edited[-1].buttons
+
+
+async def _round_of(session: AsyncSession, group_id: uuid.UUID, number: int) -> RoundView:
+    view = await active_tournament(session, group_id)
+    assert view is not None
+    return view.rounds[number - 1]

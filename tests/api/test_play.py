@@ -403,3 +403,56 @@ async def test_the_four_ways_to_be_refused_do_not_share_one_code(
     assert outsider.json()["code"] == "not_a_member"
     assert scoring.status_code == 403
     assert scoring.json()["code"] == "not_a_member"
+
+
+# --------------------------------------------------------------------------- one more
+
+
+async def test_a_mexicano_can_be_given_another_round(
+    client: AsyncClient, mailer: InMemoryMailer, factory: async_sessionmaker[AsyncSession]
+) -> None:
+    """The count agreed at the start is a plan. Evenings run long."""
+    await sign_in(client, mailer)
+    group_id, players = await make_group(factory)
+    drawn = await draw(client, group_id, players, format="mexicano", rounds=2)
+
+    response = await client.post(f"/api/tournaments/{drawn['id']}/rounds")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["total_rounds"] == 3
+
+
+async def test_an_americano_refuses_another_round(
+    client: AsyncClient, mailer: InMemoryMailer, factory: async_sessionmaker[AsyncSession]
+) -> None:
+    """Not a gap. Every pair partners exactly once over n-1 rounds, and an extra round
+    would have to repeat one — the single thing the format promises."""
+    await sign_in(client, mailer)
+    group_id, players = await make_group(factory)
+    drawn = await draw(client, group_id, players)
+
+    response = await client.post(f"/api/tournaments/{drawn['id']}/rounds")
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "wrong_format"
+
+
+async def test_a_played_out_mexicano_stays_open(
+    client: AsyncClient, mailer: InMemoryMailer, factory: async_sessionmaker[AsyncSession]
+) -> None:
+    """Closing itself the instant the last score went in would take "shall we play one
+    more" away at exactly the moment it gets asked."""
+    await sign_in(client, mailer)
+    group_id, players = await make_group(factory)
+    drawn = await draw(client, group_id, players, format="mexicano", rounds=1)
+
+    latest = drawn
+    for match in drawn["rounds"][0]["matches"]:
+        latest = (
+            await client.put(
+                f"/api/tournaments/{drawn['id']}/rounds/1/courts/{match['court']}",
+                json={"score_a": 14, "score_b": 10},
+            )
+        ).json()
+
+    assert latest["finished"] is False

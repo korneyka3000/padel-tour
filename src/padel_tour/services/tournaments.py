@@ -25,6 +25,7 @@ from padel_tour.engine import (
     amend_result,
     create_americano,
     create_mexicano,
+    extend,
     finish,
     next_round,
     progression,
@@ -365,6 +366,23 @@ async def advance_round(
     return await _refreshed_view(session, row)
 
 
+async def extend_tournament(
+    session: AsyncSession, tournament_id: uuid.UUID, *, actor: Account | None = None
+) -> TournamentView:
+    """Plan one more round.
+
+    Organiser only. Drawing the next round is open to any member because nobody chooses
+    anything — it follows from the standing — but deciding the group plays longer is a
+    decision, and it belongs to whoever is running the evening.
+    """
+    await require_organiser(session, actor, tournament_id)
+    row = await _load(session, tournament_id)
+    state = extend(load_state(row))
+    row.total_rounds = state.total_rounds
+    sync_state(row, state)
+    return await _refreshed_view(session, row)
+
+
 async def finish_tournament(
     session: AsyncSession, tournament_id: uuid.UUID, *, actor: Account | None = None
 ) -> TournamentView:
@@ -429,6 +447,7 @@ __all__ = [
     "advance_round",
     "amend_score",
     "count_tournaments",
+    "extend_tournament",
     "finish_tournament",
     "get_tournament",
     "list_tournaments",
