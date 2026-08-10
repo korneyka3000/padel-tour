@@ -1,0 +1,33 @@
+# Postgres for running the app locally.
+#
+# Not for the tests — those start their own through testcontainers, so that the suite a
+# person runs is the suite CI runs, with nothing to remember and nothing to keep in step.
+# This is for `uv run padel-tour play` and for pointing a local API at something real.
+#
+#   docker compose up -d
+#   export DATABASE_URL=postgresql://padel:padel@localhost:55432/padel
+#   uv run alembic upgrade head
+
+services:
+  postgres:
+    # Pinned, and the same major version the tests use. A database that differs from the
+    # one the suite ran against is a difference nobody notices until it matters.
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: padel
+      POSTGRES_PASSWORD: padel
+      POSTGRES_DB: padel
+    ports:
+      # Off the default port on purpose: a laptop often already has a Postgres on 5432,
+      # and connecting to the wrong one is a confusing afternoon.
+      - "55432:5432"
+    volumes:
+      - padel-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U padel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  padel-data:

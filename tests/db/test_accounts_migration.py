@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -59,12 +58,16 @@ async def rollback_to(revision: str) -> None:
 
 
 @pytest.fixture
-async def migrated_engine(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[AsyncEngine]:
-    """A database at the revision just before accounts, seeded with the old shape."""
-    url = os.environ.get("TEST_DATABASE_URL", "").strip()
-    if not url:
-        pytest.skip("migration tests need a real database; set TEST_DATABASE_URL")
+async def migrated_engine(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[AsyncEngine]:
+    """A database at the revision just before accounts, seeded with the old shape.
 
+    No longer skipped when nobody set an environment variable. These are the tests that
+    catch a migration which cannot execute, and they used to be exactly the ones a person
+    running the suite locally never saw.
+    """
+    url = database_url
     monkeypatch.setenv("DATABASE_URL", url)
 
     await rollback_to("base")
@@ -223,3 +226,19 @@ async def test_running_a_migration_does_not_silence_the_application() -> None:
     await migrate_to(ACCOUNTS_REVISION)
 
     assert not logger.disabled
+
+
+async def test_every_migration_applies_and_reverses(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole chain, both ways, including whichever revision was added this week.
+
+    Used to be a CI step, which meant it ran after the code was pushed rather than before.
+    It also only ever covered ``head`` as of the last time somebody looked at the workflow;
+    here it follows the chain wherever it goes.
+    """
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    await rollback_to("base")
+
+    await migrate_to("head")
+    await rollback_to("base")
