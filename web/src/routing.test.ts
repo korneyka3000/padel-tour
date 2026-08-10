@@ -3,8 +3,8 @@
  *
  * Everything that is not `/api/` is rewritten to `index.html`, which is what makes a deep
  * link like `/t/<uuid>` work on a refresh. It also catches paths that were never pages —
- * the analytics beacon posts to `/_vercel/insights/*`, and without an exclusion that gets
- * `index.html` back: a 200, nothing in the console, and no data, ever.
+ * both beacons post under `/_vercel/`, and without an exclusion they get `index.html` back:
+ * a 200, nothing in the console, and no data, ever.
  *
  * The config is read rather than duplicated, because a copy of a rule is a second rule.
  */
@@ -33,6 +33,7 @@ describe('the SPA rewrite', () => {
     const pattern = new RegExp(`^${catchAll?.source ?? ''}$`)
 
     expect(pattern.test('/_vercel/insights/view')).toBe(false)
+    expect(pattern.test('/_vercel/speed-insights/vitals')).toBe(false)
     expect(pattern.test('/api/health')).toBe(false)
   })
 

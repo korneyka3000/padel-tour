@@ -1,4 +1,5 @@
 import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 import { useEffect } from 'react'
 import { BrowserRouter, Route, Routes, useNavigate } from 'react-router'
 
@@ -38,10 +39,12 @@ export function App() {
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>
-          {/* Cookieless, and it sends nothing we choose — page paths and referrers only.
-              Inside the router so route changes count as visits; outside it the component
-              would only ever see the first page somebody landed on. */}
+          {/* Both cookieless, and both post to /_vercel/… — which the SPA rewrite has to
+              let past, or they get index.html back and report nothing forever. Inside the
+              router so route changes count; outside it they would only ever see the page
+              somebody first landed on. */}
           <Analytics />
+          <SpeedInsights />
         </SessionProvider>
       </LocaleProvider>
     </BrowserRouter>
