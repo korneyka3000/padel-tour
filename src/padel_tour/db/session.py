@@ -25,15 +25,56 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 
+#: Drop a pooled connection after this long rather than trusting it.
+#:
+#: Comfortably under Neon's own idle timeout, so a connection is retired by us before it is
+#: closed under us.
+POOL_RECYCLE_SECONDS = 240
+
+
 def create_engine(url: str | None = None, *, echo: bool = False) -> AsyncEngine:
-    """Build an async engine for ``url``, defaulting to the configured database."""
+    """Build an async engine for ``url``, defaulting to the configured database.
+
+    **Connections are checked before they are used.** In production this runs as a
+    serverless function: the instance is frozen between requests, sometimes for hours, and
+    Neon closes the connection at its end while our pool still believes in it. The next
+    request then dies on ``connection is closed`` — which is what happened to ``/login``,
+    and which looks to the person typing it like the bot ignoring them.
+
+    ``pool_pre_ping`` costs one cheap round trip on checkout and turns that into a silent
+    reconnect. ``pool_recycle`` retires connections before the far end does, so the ping
+    usually has nothing to fix.
+    """
     resolved = url or database_url()
-    engine = create_async_engine(resolved, echo=echo)
+    engine = create_async_engine(
+        resolved,
+        echo=echo,
+        pool_pre_ping=True,
+        pool_recycle=POOL_RECYCLE_SECONDS,
+        **_asyncpg_options(resolved),
+    )
 
     if is_sqlite(resolved):
         _enforce_sqlite_foreign_keys(engine)
 
     return engine
+
+
+def _asyncpg_options(url: str) -> dict[str, object]:
+    """Settings that only make sense against a connection pooler.
+
+    Neon's pooled endpoint is pgbouncer in transaction mode, where a prepared statement
+    outlives the transaction that made it but not the backend it was made on — so a cached
+    one eventually points at nothing and comes back as ``DuplicatePreparedStatementError``,
+    intermittently and under load. SQLAlchemy's own advice for pgbouncer is to keep no
+    cache, and that is what this does.
+
+    Only for the pooled host. Against a direct connection — every test, and local
+    development — prepared statements are free performance and stay switched on.
+    """
+    if "-pooler." not in url:
+        return {}
+    return {"prepared_statement_cache_size": 0}
 
 
 def _enforce_sqlite_foreign_keys(engine: AsyncEngine) -> None:
