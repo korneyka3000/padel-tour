@@ -24,6 +24,9 @@ class Screen(StrEnum):
     """A screen the user can navigate to. No side effects — just what to draw."""
 
     HOME = "home"
+    #: The group's roster, where people are added and removed.
+    SQUAD = "squad"
+    #: Who plays in the tournament being assembled.
     ROSTER = "roster"
     SETUP = "setup"
     DRAW = "draw"
@@ -40,6 +43,8 @@ class Action(StrEnum):
     SHOW = "scr"
     #: Toggle a player in the roster being assembled: ``tog:<hex>``
     TOGGLE = "tog"
+    #: Take somebody off the group's roster: ``del:<hex>``
+    DROP = "del"
     #: Change a setup option: ``set:points:24``
     SETTING = "set"
     #: Redraw the schedule before play starts.
@@ -106,6 +111,10 @@ def show(screen: Screen) -> str:
 
 def toggle(player_id: uuid.UUID) -> str:
     return Callback(Action.TOGGLE, player_id.hex).pack()
+
+
+def drop(player_id: uuid.UUID) -> str:
+    return Callback(Action.DROP, player_id.hex).pack()
 
 
 def setting(name: str, value: str) -> str:

@@ -23,6 +23,7 @@ from .callbacks import (
     Screen,
     confirm,
     court,
+    drop,
     plain,
     points,
     setting,
@@ -72,17 +73,44 @@ def home(group_name: str, roster: Sequence[PlayerView]) -> Rendered:
     lines = [f"<b>{esc(group_name)}</b>", ""]
     if roster:
         counted = _plural(len(roster), "игрок", "игрока", "игроков")
-        lines.append(f"В группе {len(roster)} {counted}")
-        lines.append(", ".join(esc(p.name) for p in roster[:HOME_NAME_LIMIT]))
+        lines.append(f"<b>{len(roster)}</b> {counted}")
+        lines.append("")
+        # One per line. Comma-joined, eight names are a paragraph nobody reads and nobody
+        # can point at; stacked, the roster is something you can check at a glance.
+        lines.extend(f"· {esc(player.name)}" for player in roster[:HOME_NAME_LIMIT])
         if len(roster) > HOME_NAME_LIMIT:
-            lines.append(f"…и ещё {len(roster) - HOME_NAME_LIMIT}")
+            rest = len(roster) - HOME_NAME_LIMIT
+            lines.append(f"<i>…и ещё {rest}</i>")
     else:
         lines.append("Пока никого. Добавьте игроков: <code>/add Аня, Боря, Вика</code>")
 
     builder = InlineKeyboardBuilder()
     if len(roster) >= PLAYERS_PER_COURT:
         builder.row(InlineKeyboardButton(text="🎾 Новый турнир", callback_data=show(Screen.ROSTER)))
-    builder.row(*_nav(("📜 История", show(Screen.HISTORY))))
+    builder.row(*_nav(("👥 Состав", show(Screen.SQUAD)), ("📜 История", show(Screen.HISTORY))))
+    return "\n".join(lines), builder.as_markup()
+
+
+def squad_screen(roster: Sequence[PlayerView]) -> Rendered:
+    """The group's roster, and the two things done to it: add somebody, remove somebody.
+
+    Removing hides rather than deletes — the row carries every match that person played —
+    and ``/add`` with the same name brings them back, which is why one tap is enough and
+    there is no confirmation standing in the way.
+    """
+    lines = ["<b>Состав группы</b>", ""]
+    if roster:
+        lines.append("Нажмите на игрока, чтобы убрать его из состава.")
+    else:
+        lines.append("Пока никого.")
+    lines.append("")
+    lines.append("Добавить: <code>/add Аня, Боря</code>")
+    lines.append("Переименовать: <code>/rename Аня = Анна</code>")
+
+    builder = InlineKeyboardBuilder()
+    for player in roster:
+        builder.row(InlineKeyboardButton(text=f"✕ {player.name}", callback_data=drop(player.id)))
+    builder.row(*_nav(("🏠 В начало", show(Screen.HOME))))
     return "\n".join(lines), builder.as_markup()
 
 
@@ -99,7 +127,9 @@ def roster_screen(
     options = ", ".join(str(value) for value in allowed_counts)
 
     lines = ["<b>Кто играет?</b>", ""]
-    lines.append(f"Выбрано: <b>{chosen}</b>")
+    lines.append("Все отмечены — снимите тех, кого сегодня нет.")
+    lines.append("")
+    lines.append(f"Выбрано: <b>{chosen}</b> из {len(roster)}")
     if chosen in allowed_counts:
         lines.append("Можно начинать.")
     else:

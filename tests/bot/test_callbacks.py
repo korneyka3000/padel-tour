@@ -79,6 +79,7 @@ def test_screen_names_are_stable() -> None:
     """These strings live inside messages in real chats; renaming one breaks old buttons."""
     assert {screen.value for screen in Screen} == {
         "home",
+        "squad",
         "roster",
         "setup",
         "draw",

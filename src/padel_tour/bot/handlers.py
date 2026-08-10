@@ -45,7 +45,7 @@ from padel_tour.services.errors import (
     NoTournamentsYetError,
     UnidentifiedCallerError,
 )
-from padel_tour.services.groups import get_group
+from padel_tour.services.groups import deactivate_player, get_group, rename_player
 
 from . import chart, podium, screens
 from .callbacks import Action, Callback, Screen, parse_number, parse_player_id
@@ -251,6 +251,28 @@ async def on_add(message: Message, session: AsyncSession, bot: Bot) -> None:
     await _paint(bot, session, message.chat.id, await _current_screen(session, group_id))
 
 
+@router.message(Command("rename"))
+async def on_rename(message: Message, session: AsyncSession, bot: Bot) -> None:
+    """``/rename Аня = Анна`` — fix a name without touching the history behind it."""
+    _, _, rest = (message.text or "").partition(" ")
+    before, sign, after = rest.partition("=")
+    if not sign or not before.strip() or not after.strip():
+        await message.reply("Как переименовать? Например: <code>/rename Аня = Анна</code>")
+        return
+
+    actor = await _actor(session, message)
+    group_id = await _group_for(session, message.chat.id, message.chat.title or "")
+    roster = await list_players(session, group_id)
+    match = next((p for p in roster if p.name.casefold() == before.strip().casefold()), None)
+    if match is None:
+        await message.reply(f"В составе нет игрока «{before.strip()}»")
+        return
+
+    renamed = await rename_player(session, match.id, after.strip(), actor=actor)
+    await message.reply(f"{match.name} → {renamed.name}")
+    await _paint(bot, session, message.chat.id, await _current_screen(session, group_id))
+
+
 @router.message(Command("tournament"))
 async def on_tournament(message: Message, session: AsyncSession, bot: Bot) -> None:
     """Repost the live screen, for when it has scrolled out of sight."""
@@ -353,6 +375,8 @@ async def _setup_action(
     match press.action:
         case Action.TOGGLE:
             return await _toggle(session, press.arg, chat_id, group_id)
+        case Action.DROP:
+            return await _drop(session, press.arg, group_id, actor)
         case Action.SETTING:
             return _setting(press, chat_id)
         case Action.BEGIN:
@@ -440,19 +464,12 @@ async def _show_lobby(
         case Screen.HOME:
             drafts.clear(chat_id)
             return await _home(session, group_id), None, ""
+        case Screen.SQUAD:
+            return screens.squad_screen(await list_players(session, group_id)), None, ""
         case Screen.ROSTER:
-            draft = drafts.get(chat_id) or drafts.start(chat_id, group_id)
-            roster = await list_players(session, group_id)
-            return (
-                screens.roster_screen(roster, draft.selected, draft.allowed_counts()),
-                None,
-                "",
-            )
+            return await _who_plays(session, chat_id, group_id)
         case Screen.SETUP:
-            draft = drafts.get(chat_id)
-            if draft is None:
-                return await _show(session, Screen.ROSTER.value, chat_id, group_id, actor)
-            return _setup_view(draft), None, ""
+            return await _setup_screen(session, chat_id, group_id, actor)
         case Screen.HISTORY:
             entries = await list_tournaments(session, group_id, limit=HISTORY_LIMIT)
             return screens.history_screen(entries), None, ""
@@ -550,6 +567,45 @@ async def _toggle(session: AsyncSession, raw: str, chat_id: int, group_id: uuid.
     draft.toggle(player_id)
     roster = await list_players(session, group_id)
     return screens.roster_screen(roster, draft.selected, draft.allowed_counts()), None, ""
+
+
+async def _setup_screen(
+    session: AsyncSession, chat_id: int, group_id: uuid.UUID, actor: Account
+) -> Outcome:
+    """Tournament options. Without a draft there is nothing to configure, so go back a step."""
+    draft = drafts.get(chat_id)
+    if draft is None:
+        return await _show(session, Screen.ROSTER.value, chat_id, group_id, actor)
+    return _setup_view(draft), None, ""
+
+
+async def _who_plays(session: AsyncSession, chat_id: int, group_id: uuid.UUID) -> Outcome:
+    """The selection screen, with everybody already in.
+
+    Starting from nobody made the organiser tick eight names to describe the ordinary
+    evening — the whole group turning up. Starting from everybody makes the taps describe
+    the exception instead, which is who could not make it.
+    """
+    roster = await list_players(session, group_id)
+    draft = drafts.get(chat_id)
+    if draft is None:
+        draft = drafts.start(chat_id, group_id)
+        draft.selected = {player.id for player in roster}
+    return screens.roster_screen(roster, draft.selected, draft.allowed_counts()), None, ""
+
+
+async def _drop(session: AsyncSession, raw: str, group_id: uuid.UUID, actor: Account) -> Outcome:
+    """Take somebody off the roster.
+
+    Hidden, not deleted: the row carries every match they played, and dropping it would
+    rewrite the group's history to say those games never happened. ``/add`` with the same
+    name brings them back, which is why one tap is enough.
+    """
+    player_id = parse_player_id(raw)
+    if player_id is None:
+        return _NOTHING
+    player = await deactivate_player(session, player_id, actor=actor)
+    return screens.squad_screen(await list_players(session, group_id)), None, f"{player.name} убран"
 
 
 def _setting(press: Callback, chat_id: int) -> Outcome:

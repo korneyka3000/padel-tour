@@ -195,11 +195,13 @@ async def seeded_group(session: AsyncSession) -> uuid.UUID:
 async def start_from_buttons(
     session: AsyncSession, bot: FakeBot, *, user_id: int = ORGANISER
 ) -> uuid.UUID:
-    """Walk the real path: roster → tick everyone → setup → draw."""
+    """Walk the real path: roster → setup → draw.
+
+    Nobody is ticked here, because everybody already is — the selection screen starts with
+    the whole group in, which is what an ordinary evening looks like.
+    """
     group_id = await seeded_group(session)
     await press(session, bot, show(Screen.ROSTER), user_id=user_id)
-    for player in await list_players(session, group_id):
-        await press(session, bot, toggle(player.id), user_id=user_id)
     await press(session, bot, show(Screen.SETUP), user_id=user_id)
     await press(session, bot, plain(Action.BEGIN), user_id=user_id)
     return group_id
@@ -235,14 +237,18 @@ async def test_the_screen_location_is_stored_for_a_restart(
 # --------------------------------------------------------------------------- setting up
 
 
-async def test_ticking_a_player_redraws_with_the_tick(session: AsyncSession, bot: FakeBot) -> None:
+async def test_unticking_a_player_redraws_without_the_tick(
+    session: AsyncSession, bot: FakeBot
+) -> None:
+    """Everyone starts in, so the press that matters is the one taking somebody out."""
     group_id = await seeded_group(session)
     await press(session, bot, show(Screen.ROSTER))
     first = (await list_players(session, group_id))[0]
+    assert f"✅ {first.name}" in bot.edited[-1].buttons
 
     await press(session, bot, toggle(first.id))
 
-    assert f"✅ {first.name}" in bot.edited[-1].buttons
+    assert f"▫️ {first.name}" in bot.edited[-1].buttons
 
 
 async def test_the_draw_appears_once_everyone_is_ticked(
@@ -259,8 +265,6 @@ async def test_the_draw_appears_once_everyone_is_ticked(
 async def test_settings_survive_between_presses(session: AsyncSession, bot: FakeBot) -> None:
     await seeded_group(session)
     await press(session, bot, show(Screen.ROSTER))
-    for player in await list_players(session, (await handlers._group_for(session, CHAT_ID, ""))):
-        await press(session, bot, toggle(player.id))
 
     await press(session, bot, Callback(Action.SETTING, "pts", "32").pack())
     assert "• до 32" in bot.edited[-1].buttons
@@ -323,8 +327,6 @@ async def test_a_mexicano_draws_its_next_round_by_itself(
         await add_player(session, group.id, name)
 
     await press(session, bot, show(Screen.ROSTER))
-    for player in await list_players(session, group.id):
-        await press(session, bot, toggle(player.id))
     await press(session, bot, Callback(Action.SETTING, "fmt", "mexicano").pack())
     await press(session, bot, plain(Action.BEGIN))
 
@@ -465,10 +467,8 @@ async def test_a_setup_press_carrying_nonsense_does_nothing(
     session: AsyncSession, bot: FakeBot
 ) -> None:
     """The same hole on the setup screen. Pressed while a draft exists, or it proves nothing."""
-    group_id = await seeded_group(session)
+    await seeded_group(session)
     await press(session, bot, show(Screen.ROSTER))
-    for player in await list_players(session, group_id):
-        await press(session, bot, toggle(player.id))
     await press(session, bot, show(Screen.SETUP))
 
     query = await press(session, bot, Callback(Action.SETTING, "pts", "lots").pack())
@@ -515,7 +515,8 @@ async def test_going_home_abandons_a_half_built_draft(session: AsyncSession, bot
     assert handlers.drafts.get(CHAT_ID) is None
 
     await press(session, bot, show(Screen.ROSTER))
-    assert "Выбрано: <b>0</b>" in bot.edited[-1].text
+    # A fresh draft, so everybody is back in — the abandoned untick did not survive.
+    assert "Выбрано: <b>8</b> из 8" in bot.edited[-1].text
 
 
 async def test_the_home_screen_names_the_group(session: AsyncSession, bot: FakeBot) -> None:
@@ -540,8 +541,6 @@ async def test_a_played_out_mexicano_offers_another_round(
     """The fork at the end of the plan, which is where "one more?" actually gets asked."""
     group_id = await seeded_group(session)
     await press(session, bot, show(Screen.ROSTER))
-    for player in await list_players(session, group_id):
-        await press(session, bot, toggle(player.id))
     await press(session, bot, show(Screen.SETUP))
     await press(session, bot, Callback(Action.SETTING, "fmt", "mexicano").pack())
     await press(session, bot, plain(Action.BEGIN))
@@ -561,3 +560,42 @@ async def _round_of(session: AsyncSession, group_id: uuid.UUID, number: int) -> 
     view = await active_tournament(session, group_id)
     assert view is not None
     return view.rounds[number - 1]
+
+
+# --------------------------------------------------------------------------- the roster
+
+
+async def test_the_squad_screen_can_take_somebody_off(session: AsyncSession, bot: FakeBot) -> None:
+    """Until now the roster could only be added to, and only by command."""
+    group_id = await seeded_group(session)
+    roster = await list_players(session, group_id)
+    await press(session, bot, show(Screen.SQUAD))
+    assert f"✕ {roster[0].name}" in bot.edited[-1].buttons
+
+    await press(session, bot, Callback(Action.DROP, roster[0].id.hex).pack())
+
+    remaining = await list_players(session, group_id)
+    assert roster[0].name not in [player.name for player in remaining]
+    assert f"✕ {roster[0].name}" not in bot.edited[-1].buttons
+
+
+async def test_somebody_taken_off_can_be_added_back(session: AsyncSession, bot: FakeBot) -> None:
+    """Which is why one tap is enough and there is no confirmation in the way."""
+    group_id = await seeded_group(session)
+    roster = await list_players(session, group_id)
+    await press(session, bot, Callback(Action.DROP, roster[0].id.hex).pack())
+
+    await add_player(session, group_id, roster[0].name)
+
+    back = await list_players(session, group_id)
+    assert roster[0].name in [player.name for player in back]
+
+
+async def test_the_home_screen_stacks_the_roster(session: AsyncSession, bot: FakeBot) -> None:
+    """Comma-joined, eight names are a paragraph nobody reads and nobody can point at."""
+    await seeded_group(session)
+
+    await press(session, bot, show(Screen.HOME))
+
+    text = bot.edited[-1].text
+    assert all(f"· {name}" in text for name in NAMES)
