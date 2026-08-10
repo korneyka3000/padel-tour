@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
+from sqlalchemy import text
+
 from conftest import NAMES, seed_tournament, sign_in
 from padel_tour.db import PROVIDER_EMAIL
 from padel_tour.engine import Format
@@ -12,7 +14,7 @@ from padel_tour.services import account_for_identity, finish_tournament
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
-    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
     from padel_tour.db import Account
     from padel_tour.services import TournamentView
@@ -53,6 +55,25 @@ async def test_health_reports_the_database(client: AsyncClient) -> None:
     response = await client.get("/api/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "database": "ok"}
+
+
+async def test_health_notices_a_schema_that_has_fallen_behind_the_code(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    """The case this endpoint exists for, and the one it used to miss.
+
+    A deploy that lands before its migration leaves the code believing in a column the
+    database has not got. Connectivity is perfect throughout, so ``SELECT 1`` reports
+    healthy while every tournament route answers 500 — which is exactly what happened
+    (Р-039). Dropping a column the model maps reproduces it in one statement.
+    """
+    async with engine.begin() as connection:
+        await connection.execute(text("ALTER TABLE tournaments DROP COLUMN chart_message_id"))
+
+    response = await client.get("/api/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "degraded", "database": "unreachable"}
 
 
 # --------------------------------------------------------------------------- groups

@@ -16,9 +16,12 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Response, status
-from sqlalchemy import text
+from sqlalchemy import select
 
+# Aliased: `Tournament` in this module means the wire schema, and the two would
+# otherwise shadow each other with the row losing.
 from padel_tour.db import Account
+from padel_tour.db import Tournament as TournamentRow
 from padel_tour.services import (
     active_tournament,
     get_tournament,
@@ -65,13 +68,20 @@ MAX_PAGE = 100
 
 @router.get("/health")
 async def health(session: Session) -> Health:
-    """Is the service up, and can it reach the database?
+    """Is the service up, can it reach the database, and does that database match this code?
 
-    The query matters: a process that starts but cannot see Postgres is not healthy, and
-    reporting otherwise turns a clear failure into a mystery.
+    The query used to be ``SELECT 1``, which proves the connection and nothing else. That
+    is how a deployment once reported itself healthy while every tournament route answered
+    500: the code had a column the schema did not, and connectivity was never the problem
+    (Р-039).
+
+    So it reads a whole row instead. Selecting the mapped entity makes SQLAlchemy name
+    every column it believes in, and a schema that has fallen behind the code says so here
+    rather than on the first request from a person. A canary, not a proof — it watches one
+    table, the one both migrations so far have touched.
     """
     try:
-        await session.execute(text("SELECT 1"))
+        await session.execute(select(TournamentRow).limit(1))
     except Exception:  # any failure here means the same thing to a caller
         return Health(status="degraded", database="unreachable")
     return Health(status="ok", database="ok")

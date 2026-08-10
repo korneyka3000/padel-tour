@@ -1,9 +1,14 @@
 """Remember the chart message
 
-Additive and nullable, so the order of deploy and migration does not matter this time:
-old code ignores a column it has never heard of. That was not true of the accounts
-migration, which dropped two columns the running code still selected and cost twenty
-minutes of production 500s — see Р-031.
+**Migrate before deploying.** This one is additive, and I wrote here that the order
+therefore did not matter. It does. Additive means *old* code survives the new schema; it
+says nothing about new code surviving the old one, and the model maps this column, so
+SQLAlchemy selects it on every read of a tournament. Pushing first took production to 500
+on every tournament route until the migration caught up — see Р-039.
+
+The rule, stated properly: a migration that adds something the new code needs goes first;
+one that removes something the old code still uses goes second; only a change neither side
+depends on is free to go either way.
 
 Revision ID: 9131dafc6930
 Revises: accounts
