@@ -16,6 +16,7 @@ from .accounts import (
     close_session,
     ensure_identity,
     get_account,
+    issue_sign_in_link,
     open_session,
     redeem_magic_link,
     request_magic_link,
@@ -68,6 +69,7 @@ from .permissions import (
     require_owner,
     viewing,
 )
+from .telegram_auth import account_for_launch
 from .tournaments import (
     active_tournament,
     advance_round,
@@ -125,6 +127,7 @@ __all__ = [
     "TournamentView",
     "Viewing",
     "account_for_identity",
+    "account_for_launch",
     "account_for_session",
     "active_tournament",
     "add_player",
@@ -147,6 +150,7 @@ __all__ = [
     "group_for_link",
     "groups_for_account",
     "is_member",
+    "issue_sign_in_link",
     "link_group",
     "list_groups",
     "list_players",

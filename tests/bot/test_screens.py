@@ -243,8 +243,12 @@ async def test_the_caption_names_the_podium_and_nobody_else(session: AsyncSessio
     assert [row.name for row in view.standings[: screens.PODIUM]] == named
 
 
-async def test_the_caption_offers_the_same_chart_on_the_web(session: AsyncSession) -> None:
-    """The picture is small and the phone is smaller; the page it links to is neither."""
+async def test_the_caption_offers_the_interactive_chart(session: AsyncSession) -> None:
+    """The PNG is a preview. The page behind this button is the one you can poke at.
+
+    With no Mini App configured the link is the plain site — which still works, it just
+    opens in the in-app browser instead of inside Telegram.
+    """
     view = await make_tournament(session)
     view = await play_round(session, view, 1)
 
@@ -252,6 +256,22 @@ async def test_the_caption_offers_the_same_chart_on_the_web(session: AsyncSessio
 
     links = [button.url for row in markup.inline_keyboard for button in row if button.url]
     assert links == [f"http://localhost:5173/t/{view.id}"]
+
+
+async def test_the_caption_opens_telegram_when_a_mini_app_is_configured(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A direct link, because a web_app button is private-chat only and this bot lives in
+    groups. The direct kind opens the app full-screen from a group too."""
+    monkeypatch.setenv("BOT_USERNAME", "padeltourbot")
+    monkeypatch.setenv("MINI_APP_NAME", "tour")
+    view = await make_tournament(session)
+    view = await play_round(session, view, 1)
+
+    _, markup = screens.chart_caption(view)
+
+    links = [button.url for row in markup.inline_keyboard for button in row if button.url]
+    assert links == [f"https://t.me/padeltourbot/tour?startapp=t_{view.id}"]
 
 
 # --------------------------------------------------------------------------- history

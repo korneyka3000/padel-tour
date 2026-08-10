@@ -214,6 +214,8 @@ export const api = {
   me: () => required<Me>('/auth/me'),
   askForLink: (email: string) => request<unknown>('/auth/magic-link', { email }),
   enter: (token: string) => required<Me>('/auth/enter', { token }),
+  enterFromTelegram: (initData: string) =>
+    required<Me>('/auth/telegram', { init_data: initData }),
   signOut: () => request<unknown>('/auth/sign-out'),
 
   invitation: (token: string) => required<Player>(`/invites/${token}`),

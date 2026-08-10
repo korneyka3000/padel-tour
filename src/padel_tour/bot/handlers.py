@@ -31,6 +31,7 @@ from padel_tour.services import (
     finish_tournament,
     get_tournament,
     group_for_link,
+    issue_sign_in_link,
     link_group,
     list_players,
     list_tournaments,
@@ -46,6 +47,7 @@ from padel_tour.services.errors import (
     UnidentifiedCallerError,
 )
 from padel_tour.services.groups import deactivate_player, get_group, rename_player
+from padel_tour.settings import base_url
 
 from . import chart, podium, screens
 from .callbacks import Action, Callback, Screen, parse_number, parse_player_id
@@ -249,6 +251,30 @@ async def on_add(message: Message, session: AsyncSession, bot: Bot) -> None:
         parts.append("Уже были: " + ", ".join(already))
     await message.reply("\n".join(parts))
     await _paint(bot, session, message.chat.id, await _current_screen(session, group_id))
+
+
+@router.message(Command("login"))
+async def on_login(message: Message, session: AsyncSession) -> None:
+    """A way into the web for somebody the bot already knows.
+
+    **Private chats only, and that is not a nicety.** The link signs its holder in as the
+    person who asked for it; posted in a group it would hand the whole chat one member's
+    account. Telegram gives no way to make a message visible to one person in a group, so
+    the answer there is to say where to ask instead.
+
+    No mail server involved: the bot has already established who this is, which is the
+    entire thing an emailed link exists to do.
+    """
+    if message.chat.type != "private":
+        await message.reply("Напишите мне <code>/login</code> в личку — ссылка личная.")
+        return
+
+    actor = await _actor(session, message)
+    token = await issue_sign_in_link(session, actor)
+    await message.reply(
+        "Ссылка для входа на сайт — она одноразовая и живёт пятнадцать минут:\n"
+        f"{base_url()}/auth/enter?token={token}"
+    )
 
 
 @router.message(Command("rename"))

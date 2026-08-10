@@ -118,6 +118,30 @@ async def request_magic_link(
     await mailer.send(address, SIGN_IN_SUBJECT, _sign_in_body(f"{link_base}?token={raw}"))
 
 
+async def issue_sign_in_link(session: AsyncSession, account: Account) -> str:
+    """A single-use link for somebody we have already identified.
+
+    The bot knows who is pressing its buttons, so it can hand that person a way into the
+    web without a mail server anywhere in the story. Bound to the account rather than to an
+    address, because a Telegram user may not have given us one — and resolving by address
+    would sign them in as a *different* account, losing the player they have claimed.
+
+    No cooldown, unlike the emailed kind. That one exists so the form cannot be used to fill
+    a stranger's inbox; this link goes back to the person who asked for it.
+    """
+    raw, hashed = issue()
+    session.add(
+        MagicLink(
+            email="",
+            account_id=account.id,
+            token_hash=hashed,
+            expires_at=utc_now() + MAGIC_LINK_TTL,
+        )
+    )
+    await session.flush()
+    return raw
+
+
 async def redeem_magic_link(session: AsyncSession, raw_token: str) -> Account:
     """Turn a link into an account, creating one on first sign-in."""
     link = await session.scalar(
@@ -130,6 +154,12 @@ async def redeem_magic_link(session: AsyncSession, raw_token: str) -> Account:
 
     link.used_at = utc_now()
     await session.flush()
+
+    if link.account_id is not None:
+        bound = await session.get(Account, link.account_id)
+        if bound is None:  # pragma: no cover - the foreign key cascades
+            raise InvalidTokenError("this link is not valid — ask for a new one")
+        return bound
     return await ensure_identity(session, PROVIDER_EMAIL, link.email)
 
 

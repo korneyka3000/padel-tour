@@ -18,6 +18,7 @@ from pydantic import BaseModel, EmailStr
 
 from padel_tour.db import Account
 from padel_tour.services import (
+    account_for_launch,
     close_session,
     groups_for_account,
     open_session,
@@ -25,7 +26,7 @@ from padel_tour.services import (
     request_magic_link,
 )
 from padel_tour.services.mail import Mailer, mailer_from_env
-from padel_tour.settings import base_url
+from padel_tour.settings import base_url, settings
 
 from .deps import API_PREFIX, SESSION_COOKIE, RequiredAccount, Session
 from .schemas import Group
@@ -66,6 +67,12 @@ class MagicLinkRequest(BaseModel):
     email: EmailStr
 
 
+class LaunchRequest(BaseModel):
+    """The opaque string Telegram hands a Mini App. Never trusted before it is verified."""
+
+    init_data: str
+
+
 class EnterRequest(BaseModel):
     token: str
 
@@ -104,6 +111,31 @@ async def send_magic_link(
 async def enter(body: EnterRequest, session: Session, response: Response) -> Me:
     """Exchange a link for a session."""
     account = await redeem_magic_link(session, body.token)
+    token = await open_session(session, account)
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=SESSION_MAX_AGE,
+        httponly=True,
+        secure=secure_cookies(),
+        samesite="lax",
+        path="/",
+    )
+    return await _me(session, account)
+
+
+@router.post("/telegram")
+async def enter_from_telegram(body: LaunchRequest, session: Session, response: Response) -> Me:
+    """Sign in from inside a Telegram Mini App.
+
+    No password, no email, no mail server: Telegram has already established who this is and
+    signs the claim with a key derived from the bot token. Verifying that signature is the
+    whole of the authentication — see :mod:`padel_tour.services.telegram_auth`.
+
+    The identity is the one the bot uses, so somebody who claimed a player in a chat is the
+    same person here rather than a second account with none of their history.
+    """
+    account = await account_for_launch(session, body.init_data, settings().bot_token)
     token = await open_session(session, account)
     response.set_cookie(
         SESSION_COOKIE,

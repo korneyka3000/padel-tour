@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
+import pytest
+
 from padel_tour.bot import handlers
 from padel_tour.db import PROVIDER_EMAIL, PROVIDER_TELEGRAM, Player
 from padel_tour.services import (
@@ -18,7 +20,9 @@ from padel_tour.services import (
     create_group,
     create_invite,
     ensure_identity,
+    redeem_magic_link,
 )
+from padel_tour.services.errors import InvalidTokenError
 
 if TYPE_CHECKING:
     from aiogram import Bot
@@ -33,6 +37,7 @@ ANYA_TELEGRAM = 4242
 class FakeChat:
     id: int
     title: str = ""
+    type: str = "group"
 
 
 @dataclass
@@ -124,3 +129,70 @@ async def test_a_used_deep_link_is_refused(session: AsyncSession) -> None:
 
     second = await send(session, start(token, user_id=777))
     assert "уже использовано" in second.replies[-1]
+
+
+# ------------------------------------------------------------------------ into the web
+
+
+def login(*, chat_type: str, user_id: int = ANYA_TELEGRAM) -> FakeStartMessage:
+    return FakeStartMessage(
+        text="/login",
+        chat=FakeChat(CHAT_ID, "Вторничный падел", chat_type),
+        from_user=FakeUser(user_id),
+    )
+
+
+async def test_a_sign_in_link_is_never_posted_in_a_group(session: AsyncSession) -> None:
+    """The link signs its holder in as whoever asked for it.
+
+    Posted in a group chat it would hand eight people one member's account, and Telegram
+    has no way to show a message to only one of them. So the group gets directions, not a
+    link — and the test is here because this is the kind of thing that gets "simplified"
+    later by somebody who reads the handler and not the reason.
+    """
+    message = login(chat_type="group")
+
+    await handlers.on_login(cast("Message", message), session)
+
+    assert "/auth/enter?token=" not in message.replies[-1]
+    assert "личку" in message.replies[-1]
+
+
+async def test_a_private_chat_gets_a_working_link(session: AsyncSession) -> None:
+    """No mail server anywhere in this: the bot has already established who this is, which
+    is the entire job an emailed link exists to do."""
+    message = login(chat_type="private")
+
+    await handlers.on_login(cast("Message", message), session)
+
+    reply = message.replies[-1]
+    assert "/auth/enter?token=" in reply
+
+    token = reply.partition("?token=")[2].strip()
+    account = await redeem_magic_link(session, token)
+    assert account is not None
+
+
+async def test_the_link_signs_in_as_the_telegram_account_not_a_new_one(
+    session: AsyncSession,
+) -> None:
+    """Resolving by address would mint a second account and lose the claimed player."""
+    message = login(chat_type="private")
+    await handlers.on_login(cast("Message", message), session)
+    token = message.replies[-1].partition("?token=")[2].strip()
+
+    signed_in = await redeem_magic_link(session, token)
+
+    expected = await account_for_identity(session, PROVIDER_TELEGRAM, str(ANYA_TELEGRAM))
+    assert expected is not None
+    assert signed_in.id == expected.id
+
+
+async def test_a_link_works_once(session: AsyncSession) -> None:
+    message = login(chat_type="private")
+    await handlers.on_login(cast("Message", message), session)
+    token = message.replies[-1].partition("?token=")[2].strip()
+    await redeem_magic_link(session, token)
+
+    with pytest.raises(InvalidTokenError):
+        await redeem_magic_link(session, token)

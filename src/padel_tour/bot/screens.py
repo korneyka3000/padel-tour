@@ -16,7 +16,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from padel_tour.engine import COMMON_POINT_TARGETS, Format, PairingPattern
-from padel_tour.settings import base_url
+from padel_tour.settings import mini_app_url
 
 from .callbacks import (
     Action,
@@ -456,7 +456,7 @@ def chart_caption(view: TournamentView) -> Rendered:
     )
 
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="🌐 Открыть в вебе", url=f"{base_url()}/t/{view.id}"))
+    builder.row(InlineKeyboardButton(text="📊 Открыть график", url=mini_app_url(f"t_{view.id}")))
     if view.finished:
         builder.row(*_nav(("📊 Таблица", show(Screen.TABLE)), ("🏠 В начало", show(Screen.HOME))))
     else:

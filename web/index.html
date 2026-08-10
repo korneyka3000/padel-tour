@@ -18,6 +18,10 @@
       href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Golos+Text:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <!-- Telegram injects window.Telegram.WebApp when the page is opened as a Mini App.
+         Loaded ahead of the bundle so the first render already knows where it is. Outside
+         Telegram the object simply never appears, and the site behaves like a site. -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
   <body>
     <div id="root"></div>

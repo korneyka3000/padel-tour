@@ -157,13 +157,24 @@ class LoginSession(Base):
 
 
 class MagicLink(Base):
-    """A single-use sign-in link sent to an email address."""
+    """A single-use sign-in link.
+
+    Usually sent to an email address, which is what ``email`` is for. It can instead be
+    bound to an account that is already known — the bot handing somebody a way into the web
+    when it already knows who they are, with no mail server involved. Exactly one of the two
+    is meaningful for any given link.
+    """
 
     __tablename__ = "magic_links"
     __table_args__ = (Index("uq_magic_token", "token_hash", unique=True),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_id)
     email: Mapped[str] = mapped_column(String(EXTERNAL_ID_LENGTH))
+    #: Set when the link was issued to somebody already identified, in which case redeeming
+    #: it signs in as this account rather than resolving an address.
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="CASCADE"), default=None
+    )
     token_hash: Mapped[str] = mapped_column(String(64))
     expires_at: Mapped[datetime] = mapped_column(UtcDateTime)
     used_at: Mapped[datetime | None] = mapped_column(UtcDateTime, default=None)

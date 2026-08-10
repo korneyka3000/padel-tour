@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     mail_from: str = ""
 
     public_base_url: str = ""
+    #: The bot's @username and the Mini App's short name, as set with @BotFather's
+    #: ``/newapp``. Together they make the ``t.me`` link that opens the app inside Telegram.
+    #: Unset, buttons fall back to an ordinary link and Telegram's in-app browser.
+    bot_username: str = ""
+    mini_app_name: str = ""
     #: Set by the platform, not by us. The fallback that makes a first deploy work before
     #: anybody has thought about ``PUBLIC_BASE_URL``.
     vercel_project_production_url: str = Field(default="")
@@ -106,6 +111,28 @@ def base_url() -> str:
     return DEFAULT_BASE_URL
 
 
+def mini_app_url(start_param: str = "") -> str:
+    """A link that opens the Mini App inside Telegram, or an ordinary web link.
+
+    In a group chat a ``web_app`` button is not available — Telegram allows those only in
+    private chats — but a **direct link** does work there, which is what this builds. The
+    app opens full-screen inside the client, already signed in, because Telegram hands the
+    page a signed statement of who pressed the button.
+
+    Falls back to the plain site when nobody has run ``/newapp``. That still works; it just
+    opens in the in-app browser as a stranger, and this is the difference between a chart
+    the group can poke at and a chart it can look at.
+    """
+    current = settings()
+    bot = current.bot_username.strip().lstrip("@")
+    app = current.mini_app_name.strip()
+    if not bot or not app:
+        return f"{base_url()}/{start_param.replace('_', '/', 1)}" if start_param else base_url()
+
+    suffix = f"?startapp={start_param}" if start_param else ""
+    return f"https://t.me/{bot}/{app}{suffix}"
+
+
 __all__ = [
     "DEFAULT_BASE_URL",
     "DEFAULT_SMTP_PORT",
@@ -113,5 +140,6 @@ __all__ = [
     "ENV_FILE",
     "Settings",
     "base_url",
+    "mini_app_url",
     "settings",
 ]
