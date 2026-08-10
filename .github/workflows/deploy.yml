@@ -1,0 +1,91 @@
+# Production, in the order production actually needs.
+#
+# Twice now a deploy has landed before its migration and taken half the API to 500 while
+# reporting itself healthy (Р-039, Р-043). The cause both times was the same: Vercel deploys
+# on push, migrations are a thing a person remembers, and people forget. So the order stops
+# being a habit and becomes a pipeline — tests, then schema, then traffic.
+#
+# **Inert until two things are set**, and both are the repository owner's to do:
+#
+#   1. In Vercel: Settings → Git → turn OFF automatic deploys for `main`. While that is on,
+#      Vercel races this workflow and the ordering below buys nothing.
+#   2. In GitHub: Settings → Secrets → Actions, add
+#        DATABASE_URL   the Neon connection string
+#        VERCEL_TOKEN   a token from vercel.com/account/tokens
+#        VERCEL_ORG_ID, VERCEL_PROJECT_ID   from .vercel/project.json
+#
+# Without them the job skips rather than half-deploying.
+
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Only on a green CI. A deploy behind a red suite is how the schema and the code stop
+    # agreeing in the first place.
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Check the secrets are there
+        id: armed
+        run: |
+          if [ -n "${{ secrets.DATABASE_URL }}" ] && [ -n "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploy is not armed — see the comment at the top of this workflow."
+          fi
+
+      - name: Install uv
+        if: steps.armed.outputs.ready == 'true'
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        if: steps.armed.outputs.ready == 'true'
+        run: uv sync --locked
+
+      # Schema first. A migration that adds something the new code needs has to be there
+      # before that code serves a request; one that removes something the old code uses has
+      # to wait until after. The first kind is what we keep writing, so: first.
+      - name: Migrate
+        if: steps.armed.outputs.ready == 'true'
+        run: uv run alembic upgrade head
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Deploy
+        if: steps.armed.outputs.ready == 'true'
+        run: |
+          npx vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
+          npx vercel@latest build --prod --token="$VERCEL_TOKEN"
+          npx vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Check it came up
+        if: steps.armed.outputs.ready == 'true'
+        run: |
+          # Health compares the whole mapped schema against the database, so this catches
+          # exactly the failure the ordering above is meant to prevent.
+          body=$(curl -fsS https://yo-padel-tour.vercel.app/api/health)
+          echo "$body"
+          echo "$body" | grep -q '"status":"ok"'

@@ -16,12 +16,11 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Response, status
-from sqlalchemy import select
+from sqlalchemy import text
 
 # Aliased: `Tournament` in this module means the wire schema, and the two would
 # otherwise shadow each other with the row losing.
-from padel_tour.db import Account
-from padel_tour.db import Tournament as TournamentRow
+from padel_tour.db import Account, Base
 from padel_tour.services import (
     active_tournament,
     get_tournament,
@@ -70,20 +69,38 @@ MAX_PAGE = 100
 async def health(session: Session) -> Health:
     """Is the service up, can it reach the database, and does that database match this code?
 
-    The query used to be ``SELECT 1``, which proves the connection and nothing else. That
-    is how a deployment once reported itself healthy while every tournament route answered
-    500: the code had a column the schema did not, and connectivity was never the problem
-    (Р-039).
+    Connectivity was never the interesting question. Twice now a deployment has landed
+    before its migration and answered 500 to half the API while reporting itself perfectly
+    healthy — the code believed in a column the schema had not got (Р-039, Р-043).
 
-    So it reads a whole row instead. Selecting the mapped entity makes SQLAlchemy name
-    every column it believes in, and a schema that has fallen behind the code says so here
-    rather than on the first request from a person. A canary, not a proof — it watches one
-    table, the one both migrations so far have touched.
+    The first fix read one whole row, which caught it for one table and missed it for the
+    next: the second incident was ``magic_links`` while this was watching ``tournaments``.
+    So it stopped sampling and started comparing. One query lists what the database has;
+    the mapped metadata says what the code expects; the answer names the difference.
     """
     try:
-        await session.execute(select(TournamentRow).limit(1))
+        present = {
+            (row.table_name, row.column_name)
+            for row in await session.execute(
+                text(
+                    "SELECT table_name, column_name FROM information_schema.columns "
+                    "WHERE table_schema = current_schema()"
+                )
+            )
+        }
     except Exception:  # any failure here means the same thing to a caller
         return Health(status="degraded", database="unreachable")
+
+    missing = sorted(
+        f"{table.name}.{column.name}"
+        for table in Base.metadata.sorted_tables
+        for column in table.columns
+        if (table.name, column.name) not in present
+    )
+    if missing:
+        # Named, because "degraded" sends somebody reading logs and this sends them to the
+        # migration that has not run.
+        return Health(status="degraded", database=f"schema behind code: {', '.join(missing)}")
     return Health(status="ok", database="ok")
 
 

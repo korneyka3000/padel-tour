@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
+import pytest
 from sqlalchemy import text
 
 from conftest import NAMES, seed_tournament, sign_in
@@ -57,23 +58,33 @@ async def test_health_reports_the_database(client: AsyncClient) -> None:
     assert response.json() == {"status": "ok", "database": "ok"}
 
 
+@pytest.mark.parametrize(
+    ("table", "column"),
+    [
+        ("tournaments", "chart_message_id"),
+        # The second incident was this one, while the check was watching tournaments.
+        ("magic_links", "account_id"),
+    ],
+)
 async def test_health_notices_a_schema_that_has_fallen_behind_the_code(
-    client: AsyncClient, engine: AsyncEngine
+    client: AsyncClient, engine: AsyncEngine, table: str, column: str
 ) -> None:
-    """The case this endpoint exists for, and the one it used to miss.
+    """The case this endpoint exists for, and the one it twice failed to catch.
 
-    A deploy that lands before its migration leaves the code believing in a column the
-    database has not got. Connectivity is perfect throughout, so ``SELECT 1`` reports
-    healthy while every tournament route answers 500 — which is exactly what happened
-    (Р-039). Dropping a column the model maps reproduces it in one statement.
+    A deploy landing before its migration leaves the code believing in a column the database
+    has not got. Connectivity is perfect throughout, so the service reports healthy while
+    half the API answers 500 (Р-039, Р-043). Any mapped table, not a sampled one — the
+    second time round it was the table nobody had thought to sample.
     """
     async with engine.begin() as connection:
-        await connection.execute(text("ALTER TABLE tournaments DROP COLUMN chart_message_id"))
+        await connection.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
 
     response = await client.get("/api/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "degraded", "database": "unreachable"}
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert f"{table}.{column}" in body["database"]
 
 
 # --------------------------------------------------------------------------- groups
