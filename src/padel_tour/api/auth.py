@@ -25,7 +25,7 @@ from padel_tour.services import (
     request_magic_link,
 )
 from padel_tour.services.mail import Mailer, mailer_from_env
-from padel_tour.settings import DEFAULT_BASE_URL, settings
+from padel_tour.settings import base_url
 
 from .deps import API_PREFIX, SESSION_COOKIE, RequiredAccount, Session
 from .schemas import Group
@@ -37,26 +37,6 @@ SESSION_MAX_AGE = 30 * 24 * 60 * 60
 
 #: The page a sign-in link lands on.
 ENTER_PATH = "/auth/enter"
-
-
-def base_url() -> str:
-    """Where this deployment lives.
-
-    Falls back to the domain the platform already knows about, so a fresh deployment sends
-    working sign-in links before anyone has configured anything. Set ``PUBLIC_BASE_URL``
-    once there is a real domain — the platform's variable follows the project, not the
-    address people actually type.
-    """
-    current = settings()
-    configured = current.public_base_url.strip().rstrip("/")
-    if configured:
-        return configured
-
-    platform = current.vercel_project_production_url.strip().rstrip("/")
-    if platform:
-        return platform if "://" in platform else f"https://{platform}"
-
-    return DEFAULT_BASE_URL
 
 
 def link_base() -> str:

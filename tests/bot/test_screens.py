@@ -227,23 +227,29 @@ async def test_confirming_before_finishing_says_how_far_we_got(
 # --------------------------------------------------------------------------- chart
 
 
-async def test_chart_falls_back_to_the_round_before_anything_is_played(
-    session: AsyncSession,
-) -> None:
-    view = await make_tournament(session)
-    chart, _ = screens.chart_screen(view)
-    round_text, _ = screens.round_screen(view)
-    assert chart == round_text
-
-
-async def test_chart_shows_a_column_per_played_round(session: AsyncSession) -> None:
+async def test_the_caption_names_the_podium_and_nobody_else(session: AsyncSession) -> None:
+    """A caption is capped at 1024 characters. Showing three and pointing at the full table
+    works for eight players and for twenty-four; showing all of them works for one of those
+    and truncates silently for the other."""
     view = await make_tournament(session)
     view = await play_round(session, view, 1)
-    view = await play_round(session, view, 2)
-    text, _ = screens.chart_screen(view)
-    assert "R1" in text
-    assert "R2" in text
-    assert "R3" not in text
+
+    text, _ = screens.chart_caption(view)
+
+    named = [row.name for row in view.standings if row.name in text]
+    assert len(named) == screens.PODIUM
+    assert [row.name for row in view.standings[: screens.PODIUM]] == named
+
+
+async def test_the_caption_offers_the_same_chart_on_the_web(session: AsyncSession) -> None:
+    """The picture is small and the phone is smaller; the page it links to is neither."""
+    view = await make_tournament(session)
+    view = await play_round(session, view, 1)
+
+    _, markup = screens.chart_caption(view)
+
+    links = [button.url for row in markup.inline_keyboard for button in row if button.url]
+    assert links == [f"http://localhost:5173/t/{view.id}"]
 
 
 # --------------------------------------------------------------------------- history
@@ -298,7 +304,7 @@ async def test_every_screen_uses_real_player_names(session: AsyncSession) -> Non
     rendered = [
         screens.round_screen(view),
         screens.table_screen(view),
-        screens.chart_screen(view),
+        screens.chart_caption(view),
         screens.draw_screen(view),
         screens.roster_screen(roster, set(), (8,)),
     ]

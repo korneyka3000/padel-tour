@@ -291,6 +291,14 @@ class Tournament(Base):
     #: is what lets a restarted bot pick up the same screen instead of posting a new one.
     screen_chat_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
     screen_message_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    #: The chart, which has to be its own message.
+    #:
+    #: Telegram cannot turn a text message into a photo one, so the picture cannot live in
+    #: the screen above. It gets a second message that is replaced while it is on show and
+    #: deleted the moment the chat navigates away — two messages at most, never a running
+    #: commentary. Stored rather than remembered in memory: the bot is serverless in
+    #: production and would otherwise leave an orphan photo behind on every cold start.
+    chart_message_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
     #: Who runs this tournament. Per tournament, not per group: last week it was one
     #: person, this week another.
     organiser_account_id: Mapped[uuid.UUID | None] = mapped_column(

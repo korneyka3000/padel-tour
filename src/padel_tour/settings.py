@@ -83,11 +83,35 @@ def settings() -> Settings:
     return Settings(_env_file=ENV_FILE)
 
 
+def base_url() -> str:
+    """Where this deployment lives.
+
+    Falls back to the domain the platform already knows about, so a fresh deployment sends
+    working sign-in links before anyone has configured anything. Set ``PUBLIC_BASE_URL``
+    once there is a real domain — the platform's variable follows the project, not the
+    address people actually type.
+
+    Lives here rather than in the API because the bot needs it too, for the link that takes
+    a chat to the full chart, and the bot has no business importing an HTTP router.
+    """
+    current = settings()
+    configured = current.public_base_url.strip().rstrip("/")
+    if configured:
+        return configured
+
+    platform = current.vercel_project_production_url.strip().rstrip("/")
+    if platform:
+        return platform if "://" in platform else f"https://{platform}"
+
+    return DEFAULT_BASE_URL
+
+
 __all__ = [
     "DEFAULT_BASE_URL",
     "DEFAULT_SMTP_PORT",
     "DEFAULT_SQLITE_PATH",
     "ENV_FILE",
     "Settings",
+    "base_url",
     "settings",
 ]

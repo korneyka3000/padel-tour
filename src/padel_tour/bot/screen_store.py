@@ -14,6 +14,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import BufferedInputFile, InputMediaPhoto
 from sqlalchemy import select
 
 from padel_tour.db import Tournament
@@ -107,3 +108,73 @@ async def show_screen(
     if tournament_id is not None:
         await remember_screen(session, tournament_id, chat_id, posted)
     return posted
+
+
+# --------------------------------------------------------------------------- the chart
+
+
+async def show_chart(
+    bot: Bot,
+    session: AsyncSession,
+    chat_id: int,
+    tournament_id: uuid.UUID,
+    png: bytes,
+    rendered: tuple[str, InlineKeyboardMarkup],
+) -> None:
+    """Put the chart on screen as a photo, replacing the last one if it is still up.
+
+    A second message, and it has to be. Telegram cannot turn a text message into a photo
+    one, so the picture cannot go into the screen this tournament already owns. What it can
+    do is stay to a strict two: this message is replaced while the chart is being looked at
+    and deleted the moment the chat goes anywhere else.
+    """
+    caption, markup = rendered
+    row = await session.get(Tournament, tournament_id)
+    if row is None:
+        return
+
+    photo = BufferedInputFile(png, filename="chart.png")
+    if row.chart_message_id is not None:
+        try:
+            await bot.edit_message_media(
+                media=InputMediaPhoto(media=photo, caption=caption, parse_mode="HTML"),
+                chat_id=chat_id,
+                message_id=row.chart_message_id,
+                reply_markup=markup,
+            )
+        except TelegramBadRequest as exc:
+            if _UNCHANGED in str(exc):
+                return
+            if not any(marker in str(exc) for marker in _GONE):
+                raise
+            # Somebody deleted it. Fall through and post a new one.
+            row.chart_message_id = None
+        else:
+            return
+
+    sent = await bot.send_photo(chat_id=chat_id, photo=photo, caption=caption, reply_markup=markup)
+    row.chart_message_id = sent.message_id
+
+
+async def hide_chart(bot: Bot, session: AsyncSession, chat_id: int, group_id: uuid.UUID) -> None:
+    """Take down whatever chart this group has up, if any.
+
+    Looked up by group rather than by tournament because the caller is any other button
+    press and does not know — or care — which tournament the picture belonged to. Called
+    before everything else, so leaving the chart is not something a handler has to remember.
+
+    Failure is ignored on purpose: the only ways deleting fails are that the message is
+    already gone or too old, and both mean the job is done.
+    """
+    row = await session.scalar(
+        select(Tournament).where(
+            Tournament.group_id == group_id, Tournament.chart_message_id.is_not(None)
+        )
+    )
+    if row is None or row.chart_message_id is None:
+        return
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=row.chart_message_id)
+    except TelegramBadRequest:
+        logger.info("chart message %s/%s was already gone", chat_id, row.chart_message_id)
+    row.chart_message_id = None

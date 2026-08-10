@@ -30,10 +30,11 @@ async def make_tournament(
     points: int = 24,
     pattern: PairingPattern = PairingPattern.CROSSOVER,
     organiser: Account | None = None,
+    size: int = len(NAMES),
 ) -> TournamentView:
     """A real tournament with Russian names, as a live chat would have."""
     group = await create_group(session, "Вторничный падел")
-    players = [(await add_player(session, group.id, name)).id for name in NAMES]
+    players = [(await add_player(session, group.id, name)).id for name in NAMES[:size]]
 
     config = (
         TournamentConfig(fmt, points_per_match=points)

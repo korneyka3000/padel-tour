@@ -18,8 +18,12 @@ repos:
     hooks:
       - id: check-toml
       - id: check-yaml
+      # Third-party licences are quoted verbatim or not at all — reformatting one is
+      # editing somebody else's legal text.
       - id: end-of-file-fixer
+        exclude: ^src/padel_tour/bot/assets/OFL\.txt$
       - id: trailing-whitespace
+        exclude: ^src/padel_tour/bot/assets/OFL\.txt$
       - id: check-merge-conflict
 
   - repo: local

@@ -45,9 +45,9 @@ from padel_tour.services.errors import (
 )
 from padel_tour.services.groups import get_group
 
-from . import screens
+from . import chart, screens
 from .callbacks import Action, Callback, Screen, parse_number, parse_player_id
-from .screen_store import remember_screen, show_screen
+from .screen_store import hide_chart, remember_screen, show_chart, show_screen
 from .setup_state import Draft, DraftStore
 from .wording import say
 
@@ -276,6 +276,14 @@ async def on_press(query: CallbackQuery, session: AsyncSession, bot: Bot) -> Non
     actor = await _account_for(session, query.from_user.id)
     group_id = await _group_for(session, chat_id, query.message.chat.title or "")
 
+    if parsed.action is Action.SHOW and parsed.arg == Screen.CHART:
+        await _chart(bot, session, chat_id, group_id, query)
+        return
+
+    # Any other press means the chat has moved on, and the picture goes with it. Done here
+    # rather than in each handler so nobody has to remember.
+    await hide_chart(bot, session, chat_id, group_id)
+
     try:
         rendered, tournament_id, note = await _dispatch(session, parsed, chat_id, group_id, actor)
     except (PadelEngineError, ServiceError) as exc:
@@ -448,9 +456,39 @@ async def _show_tournament(session: AsyncSession, screen: Screen, group_id: uuid
             view = await _active_or_last(session, group_id)
             return screens.table_screen(view), view.id, ""
         case Screen.CHART:
-            view = await _active_or_last(session, group_id)
-            return screens.chart_screen(view), view.id, ""
+            # Handled before dispatch, in on_press — it is a photo, and this function can
+            # only return text. Falling through to the round screen would be a lie, so the
+            # case is spelled out rather than left to the default.
+            return _NOTHING
     return _NOTHING
+
+
+async def _chart(
+    bot: Bot,
+    session: AsyncSession,
+    chat_id: int,
+    group_id: uuid.UUID,
+    query: CallbackQuery,
+) -> None:
+    """Draw the chart and put it up as its own message.
+
+    Outside the ordinary dispatch because everything else on this screen is text, and a
+    text message cannot become a photo one. A tournament with nothing played yet has no
+    chart to show, so it says so instead of posting an empty grid.
+    """
+    try:
+        view = await _active_or_last(session, group_id)
+    except ServiceError as exc:
+        await query.answer(say(exc), show_alert=True)
+        return
+
+    png = chart.render(view)
+    if png is None:
+        await query.answer("Сыграйте раунд — тогда будет что показать", show_alert=True)
+        return
+
+    await query.answer()
+    await show_chart(bot, session, chat_id, view.id, png, screens.chart_caption(view))
 
 
 async def _round(session: AsyncSession, group_id: uuid.UUID) -> Outcome:

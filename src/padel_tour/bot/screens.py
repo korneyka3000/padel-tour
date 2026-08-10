@@ -16,6 +16,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from padel_tour.engine import COMMON_POINT_TARGETS, Format, PairingPattern
+from padel_tour.settings import base_url
 
 from .callbacks import (
     Action,
@@ -59,7 +60,8 @@ PLAYERS_PER_COURT = 4
 HOME_NAME_LIMIT = 12
 #: Longest name a monospaced table column can show without wrapping on a phone.
 TABLE_NAME_WIDTH = 14
-CHART_NAME_WIDTH = 12
+#: How many of the standings fit in a photo caption without crowding the picture.
+PODIUM = 3
 
 
 def esc(text: str) -> str:
@@ -354,24 +356,23 @@ def confirm_finish(view: TournamentView) -> Rendered:
 # --------------------------------------------------------------------------- chart
 
 
-def chart_screen(view: TournamentView) -> Rendered:
-    """Points round by round, and how each player moved through the places."""
-    series = view.progression
-    played = [point.round_no for point in next(iter(series.values()), ())]
-    if not played:
-        return round_screen(view)
+def chart_caption(view: TournamentView) -> Rendered:
+    """What goes under the picture.
 
-    lines = ["<b>Ход турнира</b>", "", "<pre>"]
-    header = "".join(f"R{number:<4}" for number in played)
-    lines.append(f"{'игрок':<12}{header}места")
-    for row in view.standings:
-        points_seq = series[row.player_id]
-        cells = "".join(f"{point.cumulative_points:<5}" for point in points_seq)
-        path = "→".join(str(point.rank) for point in points_seq)
-        lines.append(f"{row.name[:CHART_NAME_WIDTH]:<{CHART_NAME_WIDTH}}{cells}{path}")
-    lines.append("</pre>")
+    Short on purpose. A caption is capped at 1024 characters, which an eight-player table
+    fits inside and a twenty-four-player one does not — so rather than have the screen work
+    for small groups and silently truncate for large ones, it always shows the top three and
+    points at the full table, which is one button away.
+    """
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    lines = ["<b>Ход турнира</b>", "", "Места по раундам.", ""]
+    lines.extend(
+        f"{medals.get(row.rank, row.rank)} {esc(row.name)} — {row.points_for}"
+        for row in view.standings[:PODIUM]
+    )
 
     builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🌐 Открыть в вебе", url=f"{base_url()}/t/{view.id}"))
     if view.finished:
         builder.row(*_nav(("📊 Таблица", show(Screen.TABLE)), ("🏠 В начало", show(Screen.HOME))))
     else:
