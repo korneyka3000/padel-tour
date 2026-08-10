@@ -10,10 +10,12 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 
 import { Failed, Loading, Note, useAsync } from '../components/Async'
+import { useT } from '../components/Locale'
 import { api } from '../lib/api'
 import { rememberDestination, useSession } from '../lib/auth'
 
 export function InvitePage() {
+  const t = useT()
   const { token = '' } = useParams()
   const navigate = useNavigate()
   const { me, loading: checking, refresh } = useSession()
@@ -22,8 +24,8 @@ export function InvitePage() {
   const [failure, setFailure] = useState<string | null>(null)
 
   if (loading || checking) return <Loading />
-  if (error) return <Failed message={error} />
-  if (!player) return <Note title="Приглашение не найдено" />
+  if (error) return <Failed failure={error} />
+  if (!player) return <Note title={t('invite.notFound')} />
 
   async function accept() {
     setBusy(true)
@@ -33,7 +35,7 @@ export function InvitePage() {
       await refresh()
       void navigate('/', { replace: true })
     } catch (problem) {
-      setFailure(problem instanceof Error ? problem.message : 'Не получилось')
+      setFailure(t.say(problem))
       setBusy(false)
     }
   }
@@ -41,29 +43,29 @@ export function InvitePage() {
   return (
     <>
       <header>
-        <p className="eyebrow">Приглашение</p>
-        <h1 className="title">Вы — {player.name}</h1>
+        <p className="eyebrow">{t('invite.eyebrow')}</p>
+        <h1 className="title">{t('invite.youAre', { name: player.name })}</h1>
         <p className="subtitle">
-          Приняв, вы получите свою историю матчей и сможете вносить счёт в своих играх.
+          {t('invite.body')}
         </p>
       </header>
 
       {me ? (
         <div className="form">
           <button className="button" type="button" onClick={() => void accept()} disabled={busy}>
-            {busy ? 'Принимаем…' : `Играть как ${player.name}`}
+            {busy ? t('invite.accepting') : t('invite.accept', { name: player.name })}
           </button>
           {failure && <p className="field-error">{failure}</p>}
         </div>
       ) : (
         <div className="form">
-          <p className="subtitle">Чтобы приглашение осталось за вами, сначала войдите.</p>
+          <p className="subtitle">{t('invite.signInFirst')}</p>
           <Link
             className="button"
             to="/sign-in"
             onClick={() => rememberDestination(`/i/${token}`)}
           >
-            Войти и продолжить
+            {t('invite.signInAndContinue')}
           </Link>
         </div>
       )}

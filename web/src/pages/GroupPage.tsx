@@ -9,7 +9,8 @@ import { CourtGrid } from '../components/Court'
 import { Roster } from '../components/Roster'
 import { Standings } from '../components/Standings'
 import type { GroupDetail, Player, Tournament, TournamentCard } from '../lib/api'
-import { FORMAT_LABEL, api, formatDate, plural } from '../lib/api'
+import { useT } from '../components/Locale'
+import { api } from '../lib/api'
 
 interface Loaded {
   group: GroupDetail
@@ -18,6 +19,7 @@ interface Loaded {
 }
 
 export function GroupPage() {
+  const t = useT()
   const { id = '' } = useParams()
   // The roster changes under this page — a player added, an invitation issued — and
   // reloading the whole group to show one new name would throw away the tournament with it.
@@ -35,7 +37,7 @@ export function GroupPage() {
   )
 
   if (loading) return <Loading />
-  if (error) return <Failed message={error} />
+  if (error) return <Failed failure={error} />
   if (!data) return null
 
   const { group, active, archive } = data
@@ -47,26 +49,29 @@ export function GroupPage() {
     <>
       <header>
         <p className="eyebrow">
-          {players.length} {plural(players.length, 'игрок', 'игрока', 'игроков')}
+          {t.count('players', players.length)}
         </p>
         <h1 className="title">{group.name}</h1>
         {active ? (
           <p className="subtitle">
-            Сейчас идёт {FORMAT_LABEL[active.format].toLowerCase()} — раунд{' '}
-            {active.rounds_played + 1} из {active.total_rounds}
+            {t('group.nowPlaying', {
+              format: t(`format.${active.format}`),
+              round: active.rounds_played + 1,
+              total: active.total_rounds,
+            })}
           </p>
         ) : (
-          <p className="subtitle">Сейчас никто не играет</p>
+          <p className="subtitle">{t('group.nobodyPlaying')}</p>
         )}
         {group.is_owner && (
           <div className="actions">
             {active ? (
               <Link className="button" to={`/t/${active.id}`}>
-                К турниру
+                {t('group.toTournament')}
               </Link>
             ) : (
               <Link className="button" to={`/g/${group.id}/play`}>
-                Собрать турнир
+                {t('group.assemble')}
               </Link>
             )}
           </div>
@@ -83,31 +88,33 @@ export function GroupPage() {
 
       <section className="section" aria-labelledby="archive-heading">
         <div className="section-head">
-          <h2 id="archive-heading">Прошедшие турниры</h2>
+          <h2 id="archive-heading">{t('group.archive')}</h2>
           <span className="eyebrow">{past.length}</span>
         </div>
 
         {past.length === 0 ? (
-          <Note title="Пока ни одного">
-            {group.is_owner
-              ? 'Соберите первый — он появится здесь.'
-              : 'Как только кто-нибудь соберёт турнир, он появится здесь.'}
+          <Note title={t('group.noneYet')}>
+            {group.is_owner ? t('group.assembleFirst') : t('group.someoneWill')}
           </Note>
         ) : (
           <div className="cards">
             {past.map((entry) => (
               <Link className="card" key={entry.id} to={`/t/${entry.id}`}>
                 <span>
-                  <span className="card-title">{FORMAT_LABEL[entry.format]}</span>
+                  <span className="card-title">{t(`format.${entry.format}`)}</span>
                   <span className="card-meta">
-                    {formatDate(entry.created_at)} · {entry.player_count}{' '}
-                    {plural(entry.player_count, 'игрок', 'игрока', 'игроков')}
-                    {entry.finished ? '' : ` · сыграно ${entry.rounds_played} из ${entry.total_rounds}`}
+                    {t.date(entry.created_at)} · {t.count('players', entry.player_count)}
+                    {entry.finished
+                      ? ''
+                      : ` · ${t('group.playedOf', {
+                          played: entry.rounds_played,
+                          total: entry.total_rounds,
+                        })}`}
                   </span>
                 </span>
                 {entry.winner_name && (
                   <span className="card-winner">
-                    победитель
+                    {t('group.winner')}
                     <b>{entry.winner_name}</b>
                   </span>
                 )}

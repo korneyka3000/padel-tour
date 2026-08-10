@@ -9,10 +9,12 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import { Loading, Note } from '../components/Async'
+import { useT } from '../components/Locale'
 import { api } from '../lib/api'
 import { takeDestination, useSession } from '../lib/auth'
 
 export function EnterPage() {
+  const t = useT()
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const { refresh } = useSession()
@@ -28,7 +30,7 @@ export function EnterPage() {
     started.current = true
 
     if (!token) {
-      setError('В ссылке нет токена')
+      setError(t('enter.noToken'))
       return
     }
 
@@ -39,14 +41,14 @@ export function EnterPage() {
         void navigate(takeDestination(), { replace: true })
       })
       .catch((failure: unknown) => {
-        setError(failure instanceof Error ? failure.message : 'Ссылка не сработала')
+        setError(t.say(failure))
       })
   }, [token, refresh, navigate])
 
   if (error) {
     return (
-      <Note title="Не вошли">
-        {error}. <Link to="/sign-in">Запросите новую ссылку</Link>.
+      <Note title={t('enter.title')}>
+        {error}. <Link to="/sign-in">{t('enter.askNew')}</Link>.
       </Note>
     )
   }

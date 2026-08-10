@@ -13,6 +13,7 @@
 import { useState } from 'react'
 
 import type { Match, Round } from '../lib/api'
+import { useT } from './Locale'
 
 /**
  * Court markings to scale: 20m long by 10m wide, service lines 3m either side of the net,
@@ -83,6 +84,7 @@ function ScoreEntry({
   points: number
   onSubmit: (a: number, b: number) => Promise<void>
 }) {
+  const t = useT()
   const [open, setOpen] = useState(match.score_a === null)
   const [a, setA] = useState<number | null>(match.score_a)
   const [busy, setBusy] = useState(false)
@@ -92,7 +94,7 @@ function ScoreEntry({
     return (
       <div className="court-score">
         <button className="link-button" type="button" onClick={() => setOpen(true)}>
-          исправить счёт
+          {t('court.fixScore')}
         </button>
       </div>
     )
@@ -110,7 +112,7 @@ function ScoreEntry({
       await onSubmit(a, b)
       setOpen(false)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Не записалось')
+      setError(t.say(failure))
     } finally {
       setBusy(false)
     }
@@ -125,7 +127,7 @@ function ScoreEntry({
         min={0}
         max={points}
         value={a ?? ''}
-        aria-label={`Очки пары ${match.team_a.join(' и ')}`}
+        aria-label={t('court.pointsFor', { pair: match.team_a.join(' + ') })}
         onChange={(event) =>
           setA(event.target.value === '' ? null : Number(event.target.value))
         }
@@ -138,13 +140,13 @@ function ScoreEntry({
         min={0}
         max={points}
         value={b ?? ''}
-        aria-label={`Очки пары ${match.team_b.join(' и ')}`}
+        aria-label={t('court.pointsFor', { pair: match.team_b.join(' + ') })}
         onChange={(event) =>
           setA(event.target.value === '' ? null : points - Number(event.target.value))
         }
       />
       <button className="button button-small" type="submit" disabled={!ready || busy}>
-        {busy ? '…' : 'ОК'}
+        {busy ? '…' : t('court.ok')}
       </button>
       {error && <span className="field-error">{error}</span>}
     </form>
@@ -160,6 +162,7 @@ function CourtBox({
   index: number
   scoring?: Scoring
 }) {
+  const t = useT()
   const played = match.score_a !== null && match.score_b !== null
   const mine = scoring?.can(match) ?? false
 
@@ -173,8 +176,8 @@ function CourtBox({
         style={{ animationDelay: `${index * 70}ms` }}
       >
         <Markings />
-        <span className="court-tag">Корт {match.court}</span>
-        {!played && <span className="court-live">Идёт</span>}
+        <span className="court-tag">{t('court.number', { court: match.court })}</span>
+        {!played && <span className="court-live">{t('court.live')}</span>}
         <Side players={match.team_a} score={match.score_a} align="start" />
         <Side players={match.team_b} score={match.score_b} align="end" />
       </figure>
@@ -216,13 +219,15 @@ export function CourtGrid({
   scoring?: Scoring
   nav?: RoundNav
 }) {
+  const t = useT()
+
   return (
     <section className="section" aria-labelledby="round-heading">
       <h2 className="round-meta" id="round-heading">
         <span className="round-number">{round.number}</span>
         <span className="round-of">
-          раунд из {totalRounds}
-          {round.complete ? ' · доигран' : ''}
+          {t('court.roundOf', { total: totalRounds })}
+          {round.complete ? ` · ${t('court.roundDone')}` : ''}
         </span>
         {nav && (
           // A score entered wrong is usually noticed a round later, so getting back to it
@@ -233,7 +238,7 @@ export function CourtGrid({
               className="link-button"
               type="button"
               disabled={!nav.canGoBack}
-              aria-label="Предыдущий раунд"
+              aria-label={t('court.prevRound')}
               onClick={() => nav.onStep(-1)}
             >
               ←
@@ -242,7 +247,7 @@ export function CourtGrid({
               className="link-button"
               type="button"
               disabled={!nav.canGoForward}
-              aria-label="Следующий раунд"
+              aria-label={t('court.nextRound')}
               onClick={() => nav.onStep(1)}
             >
               →

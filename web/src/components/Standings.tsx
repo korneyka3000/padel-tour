@@ -3,27 +3,30 @@
 import { Link } from 'react-router'
 
 import type { Standing } from '../lib/api'
+import { useT } from './Locale'
 
 const PODIUM = 3
 
 export function Standings({ rows }: { rows: Standing[] }) {
+  const t = useT()
+
   return (
     <section className="section" aria-labelledby="standings-heading">
       <div className="section-head">
-        <h2 id="standings-heading">Таблица</h2>
+        <h2 id="standings-heading">{t('standings.title')}</h2>
       </div>
       <table className="table">
         <thead>
           <tr>
             {/* The column stays in the layout; only its label is for screen readers. */}
             <th scope="col">
-              <span className="visually-hidden">Место</span>
+              <span className="visually-hidden">{t('standings.place')}</span>
             </th>
-            <th scope="col">Игрок</th>
-            <th scope="col">Матчи</th>
-            <th scope="col">Победы</th>
-            <th scope="col">Очки</th>
-            <th scope="col">Разница</th>
+            <th scope="col">{t('standings.player')}</th>
+            <th scope="col">{t('standings.matches')}</th>
+            <th scope="col">{t('standings.wins')}</th>
+            <th scope="col">{t('standings.points')}</th>
+            <th scope="col">{t('standings.diff')}</th>
           </tr>
         </thead>
         <tbody>

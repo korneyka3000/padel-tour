@@ -14,6 +14,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 
 import type { PlayerProgress } from '../lib/api'
+import { useT } from './Locale'
 
 const ROW = 30
 const PAD = { top: 20, right: 82, bottom: 24, left: 24 }
@@ -62,6 +63,7 @@ function useMeasuredWidth(): [React.RefObject<HTMLDivElement | null>, number] {
 }
 
 export function Climb({ progression }: { progression: PlayerProgress[] }) {
+  const t = useT()
   const [active, setActive] = useState<string | null>(null)
   const [ref, width] = useMeasuredWidth()
   const titleId = useId()
@@ -78,8 +80,8 @@ export function Climb({ progression }: { progression: PlayerProgress[] }) {
   return (
     <section className="section" aria-labelledby={titleId}>
       <div className="section-head">
-        <h2 id={titleId}>Ход турнира</h2>
-        <span className="eyebrow">места по раундам</span>
+        <h2 id={titleId}>{t('climb.title')}</h2>
+        <span className="eyebrow">{t('climb.subtitle')}</span>
       </div>
 
       <div ref={ref}>
@@ -90,7 +92,7 @@ export function Climb({ progression }: { progression: PlayerProgress[] }) {
             height={height}
             viewBox={`0 0 ${width} ${height}`}
             role="img"
-            aria-label={`Места по раундам. Лидирует ${lines[0]?.name ?? ''}.`}
+            aria-label={t('climb.aria', { name: lines[0]?.name ?? '' })}
           >
             {rounds.map((roundNo) => (
               <g key={roundNo}>

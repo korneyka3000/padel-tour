@@ -9,9 +9,11 @@ import { CourtGrid } from '../components/Court'
 import { Standings } from '../components/Standings'
 import type { Scoring } from '../components/Court'
 import type { Tournament } from '../lib/api'
-import { FORMAT_LABEL, api, canScore, formatDate, plural } from '../lib/api'
+import { useT } from '../components/Locale'
+import { api, canScore } from '../lib/api'
 
 export function TournamentPage() {
+  const t = useT()
   const { id = '' } = useParams()
   const { data, error, loading } = useAsync(() => api.tournament(id), [id])
   // Every write answers with the whole tournament, so the screen is redrawn from the
@@ -22,7 +24,7 @@ export function TournamentPage() {
   const [looking, setLooking] = useState<number | null>(null)
 
   if (loading) return <Loading />
-  if (error) return <Failed message={error} />
+  if (error) return <Failed failure={error} />
   if (!data) return null
 
   const tournament = live ?? data
@@ -46,19 +48,19 @@ export function TournamentPage() {
   return (
     <>
       <Link className="back" to={`/g/${tournament.group_id}`}>
-        ← К группе
+        {t('nav.toGroup')}
       </Link>
 
       <header>
         <p className="eyebrow">
-          {tournament.finished ? 'Завершён' : 'Идёт сейчас'} ·{' '}
-          {formatDate(tournament.created_at)}
+          {tournament.finished ? t('tournament.finished') : t('tournament.live')} ·{' '}
+          {t.date(tournament.created_at)}
         </p>
-        <h1 className="title">{FORMAT_LABEL[tournament.format]}</h1>
+        <h1 className="title">{t(`format.${tournament.format}`)}</h1>
         <p className="subtitle">
-          {players} {plural(players, 'игрок', 'игрока', 'игроков')} · матч до{' '}
-          {tournament.points_per_match} · {tournament.total_rounds}{' '}
-          {plural(tournament.total_rounds, 'раунд', 'раунда', 'раундов')}
+          {t.count('players', players)} ·{' '}
+          {t('tournament.matchTo', { points: tournament.points_per_match })} ·{' '}
+          {t.count('rounds', tournament.total_rounds)}
         </p>
       </header>
 
@@ -102,6 +104,7 @@ function Controls({
   tournament: Tournament
   onChange: (tournament: Tournament) => void
 }) {
+  const t = useT()
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -120,7 +123,7 @@ function Controls({
     try {
       onChange(await action())
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Не получилось')
+      setError(t.say(failure))
     } finally {
       setBusy(null)
     }
@@ -131,18 +134,18 @@ function Controls({
   const buttons = [
     canAdvance && {
       key: 'next',
-      label: 'Следующий раунд',
+      label: t('tournament.nextRound'),
       run: () => api.nextRound(tournament.id),
     },
     viewer.is_organiser &&
       !started && {
         key: 'reroll',
-        label: 'Пересдать',
+        label: t('tournament.reroll'),
         run: () => api.reroll(tournament.id),
       },
     viewer.is_organiser && {
       key: 'finish',
-      label: 'Завершить',
+      label: t('tournament.finish'),
       run: () => api.finish(tournament.id),
     },
   ].filter((entry) => entry !== false && entry !== undefined)

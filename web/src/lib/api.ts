@@ -137,6 +137,10 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The server's machine-readable name for this refusal. Empty if it did not say. */
+    readonly code = '',
+    /** The values its sentence was built from, so a translation can place them itself. */
+    readonly params: Record<string, unknown> = {},
   ) {
     super(message)
     this.name = 'ApiError'
@@ -144,6 +148,12 @@ export class ApiError extends Error {
 }
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+
+interface ErrorBody {
+  detail?: string
+  code?: string
+  params?: Record<string, unknown>
+}
 
 /** Answers null for 204 — an idle group is not an error, it is just not playing. */
 async function request<T>(path: string, body?: unknown, method?: Method): Promise<T | null> {
@@ -162,11 +172,18 @@ async function request<T>(path: string, body?: unknown, method?: Method): Promis
   if (response.status === 204) return null
 
   if (!response.ok) {
-    const detail = await response
+    // The body is the interesting part of a refusal, and it may not be there at all — a
+    // gateway timing out answers HTML, or nothing.
+    const body = await response
       .json()
-      .then((body: { detail?: string }) => body.detail)
-      .catch(() => undefined)
-    throw new ApiError(response.status, detail ?? `Запрос не прошёл (${response.status})`)
+      .then((parsed: ErrorBody) => parsed)
+      .catch(() => ({}) as ErrorBody)
+    throw new ApiError(
+      response.status,
+      body.detail ?? `request failed (${response.status})`,
+      body.code ?? '',
+      body.params ?? {},
+    )
   }
 
   return (await response.json()) as T
@@ -174,7 +191,7 @@ async function request<T>(path: string, body?: unknown, method?: Method): Promis
 
 async function required<T>(path: string, body?: unknown, method?: Method): Promise<T> {
   const answer = await request<T>(path, body, method)
-  if (answer === null) throw new ApiError(204, 'Пусто')
+  if (answer === null) throw new ApiError(204, 'empty response')
   return answer
 }
 
@@ -236,25 +253,4 @@ export function canScore(viewer: Viewer, match: Match): boolean {
   if (viewer.is_organiser || viewer.anyone_may_score) return true
   if (viewer.plays_as === null) return true
   return [...match.team_a_ids, ...match.team_b_ids].includes(viewer.plays_as)
-}
-
-export const FORMAT_LABEL: Record<Format, string> = {
-  americano: 'Американо',
-  mexicano: 'Мексикано',
-}
-
-/** Russian noun agreement, including the teens exception. */
-export function plural(count: number, one: string, few: string, many: string): string {
-  const lastTwo = count % 100
-  const last = count % 10
-  if (last === 1 && lastTwo !== 11) return one
-  if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return few
-  return many
-}
-
-export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-  })
 }

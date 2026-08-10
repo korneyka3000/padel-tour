@@ -11,22 +11,27 @@ import { useNavigate, useParams } from 'react-router'
 
 import { Failed, Loading, useAsync } from '../components/Async'
 import type { Format, PairingPattern } from '../lib/api'
-import { api, plural } from '../lib/api'
+import type { Key } from '../lib/i18n'
+import { ru } from '../lib/i18n'
+import { useT } from '../components/Locale'
+import { api } from '../lib/api'
 
 /** A round needs four people on a court, and an Americano needs whole courts. */
 const PER_COURT = 4
 
 const POINTS = [16, 21, 24, 32]
 
-const PATTERNS: { value: PairingPattern; label: string; hint: string }[] = [
-  { value: 'crossover', label: 'Крест', hint: '1+4 против 2+3' },
-  { value: 'split', label: 'Через одного', hint: '1+3 против 2+4' },
-  { value: 'top_heavy', label: 'По силе', hint: '1+2 против 3+4' },
+/** Keyed rather than worded: the pattern is data, its name is language. */
+const PATTERNS: { value: PairingPattern; label: Key; hint: Key }[] = [
+  { value: 'crossover', label: 'draw.crossover', hint: 'draw.crossoverHint' },
+  { value: 'split', label: 'draw.split', hint: 'draw.splitHint' },
+  { value: 'top_heavy', label: 'draw.topHeavy', hint: 'draw.topHeavyHint' },
 ]
 
 const DEFAULT_ROUNDS = 5
 
 export function DrawPage() {
+  const t = useT()
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const { data, error, loading } = useAsync(() => api.group(id), [id])
@@ -40,7 +45,7 @@ export function DrawPage() {
   const [failure, setFailure] = useState<string | null>(null)
 
   if (loading) return <Loading />
-  if (error) return <Failed message={error} />
+  if (error) return <Failed failure={error} />
   if (!data) return null
 
   function toggle(playerId: string) {
@@ -68,7 +73,7 @@ export function DrawPage() {
       })
       void navigate(`/t/${drawn.id}`)
     } catch (problem) {
-      setFailure(problem instanceof Error ? problem.message : 'Не собралось')
+      setFailure(t.say(problem))
       setBusy(false)
     }
   }
@@ -76,26 +81,24 @@ export function DrawPage() {
   return (
     <>
       <a className="back" href={`/g/${id}`}>
-        ← К группе
+        {t('nav.toGroup')}
       </a>
 
       <header>
         <p className="eyebrow">{data.name}</p>
-        <h1 className="title">Собрать турнир</h1>
+        <h1 className="title">{t('draw.title')}</h1>
         <p className="subtitle">
           {count === 0
-            ? 'Отметьте, кто играет'
-            : `${count} ${plural(count, 'игрок', 'игрока', 'игроков')}${
-                fits ? ` · ${courts} ${plural(courts, 'корт', 'корта', 'кортов')}` : ''
-              }`}
+            ? t('draw.pickWho')
+            : `${t.count('players', count)}${fits ? ` · ${t.count('courts', courts)}` : ''}`}
         </p>
       </header>
 
       <section className="section" aria-labelledby="who-heading">
         <div className="section-head">
-          <h2 id="who-heading">Кто играет</h2>
+          <h2 id="who-heading">{t('draw.whoPlays')}</h2>
           {!fits && count > 0 && (
-            <span className="eyebrow">нужно 4, 8, 12, 16…</span>
+            <span className="eyebrow">{t('draw.needMultiple')}</span>
           )}
         </div>
         <ul className="picks">
@@ -116,21 +119,21 @@ export function DrawPage() {
 
       <section className="section" aria-labelledby="rules-heading">
         <div className="section-head">
-          <h2 id="rules-heading">Правила</h2>
+          <h2 id="rules-heading">{t('draw.rules')}</h2>
         </div>
 
         <Choice
-          label="Формат"
+          label="draw.format"
           options={[
-            { value: 'americano', label: 'Американо', hint: 'каждый с каждым в паре' },
-            { value: 'mexicano', label: 'Мексикано', hint: 'пары по таблице' },
+            { value: 'americano', label: 'format.americano', hint: 'draw.americanoHint' },
+            { value: 'mexicano', label: 'format.mexicano', hint: 'draw.mexicanoHint' },
           ]}
           value={format}
           onChange={setFormat}
         />
 
         <Choice
-          label="Матч до"
+          label="draw.matchTo"
           options={POINTS.map((value) => ({ value, label: String(value) }))}
           value={points}
           onChange={setPoints}
@@ -138,9 +141,9 @@ export function DrawPage() {
 
         {format === 'mexicano' && (
           <>
-            <Choice label="Пары" options={PATTERNS} value={pattern} onChange={setPattern} />
+            <Choice label="draw.pairs" options={PATTERNS} value={pattern} onChange={setPattern} />
             <label className="field">
-              <span className="field-label">Раундов</span>
+              <span className="field-label">{t('draw.rounds')}</span>
               <input
                 className="field-input"
                 type="number"
@@ -162,7 +165,7 @@ export function DrawPage() {
           disabled={!fits || busy}
           onClick={() => void submit()}
         >
-          {busy ? 'Жеребьёвка…' : 'Жеребьёвка'}
+          {busy ? t('draw.going') : t('draw.go')}
         </button>
         {failure && <p className="field-error">{failure}</p>}
       </div>
@@ -170,20 +173,27 @@ export function DrawPage() {
   )
 }
 
+/**
+ * Options carry keys, not words — except the numbers, which are the same in every language
+ * and would need a dictionary entry each to pretend otherwise.
+ */
 function Choice<T extends string | number>({
   label,
   options,
   value,
   onChange,
 }: {
-  label: string
-  options: { value: T; label: string; hint?: string }[]
+  label: Key
+  options: { value: T; label: Key | string; hint?: Key }[]
   value: T
   onChange: (value: T) => void
 }) {
+  const t = useT()
+  const say = (word: Key | string) => (word in ru ? t(word as Key) : word)
+
   return (
     <fieldset className="choice">
-      <legend className="field-label">{label}</legend>
+      <legend className="field-label">{t(label)}</legend>
       <div className="choice-options">
         {options.map((option) => (
           <button
@@ -193,8 +203,8 @@ function Choice<T extends string | number>({
             aria-pressed={option.value === value}
             onClick={() => onChange(option.value)}
           >
-            {option.label}
-            {option.hint && <span className="pick-hint">{option.hint}</span>}
+            {say(option.label)}
+            {option.hint && <span className="pick-hint">{t(option.hint)}</span>}
           </button>
         ))}
       </div>

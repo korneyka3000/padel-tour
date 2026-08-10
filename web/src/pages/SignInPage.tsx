@@ -9,9 +9,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 
+import { useT } from '../components/Locale'
+
 import { api } from '../lib/api'
 
 export function SignInPage() {
+  const t = useT()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -25,7 +28,7 @@ export function SignInPage() {
       await api.askForLink(email)
       setSent(true)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Не отправилось')
+      setError(t.say(failure))
     } finally {
       setBusy(false)
     }
@@ -35,14 +38,13 @@ export function SignInPage() {
     return (
       <>
         <Link className="back" to="/">
-          ← На главную
+          {t('nav.home')}
         </Link>
         <header>
-          <p className="eyebrow">Вход</p>
-          <h1 className="title">Проверьте почту</h1>
+          <p className="eyebrow">{t('signIn.eyebrow')}</p>
+          <h1 className="title">{t('signIn.checkMail')}</h1>
           <p className="subtitle">
-            Отправили ссылку на <b>{email}</b>. Она действует пятнадцать минут и срабатывает
-            один раз.
+            {t('signIn.sentTo', { email })}
           </p>
         </header>
       </>
@@ -52,19 +54,19 @@ export function SignInPage() {
   return (
     <>
       <Link className="back" to="/">
-        ← На главную
+        {t('nav.home')}
       </Link>
       <header>
-        <p className="eyebrow">Вход</p>
-        <h1 className="title">Ссылка вместо пароля</h1>
+        <p className="eyebrow">{t('signIn.eyebrow')}</p>
+        <h1 className="title">{t('signIn.title')}</h1>
         <p className="subtitle">
-          Оставьте адрес — пришлём ссылку, по которой вы окажетесь внутри. Пароля здесь нет.
+          {t('signIn.body')}
         </p>
       </header>
 
       <form className="form" onSubmit={submit}>
         <label className="field">
-          <span className="field-label">Почта</span>
+          <span className="field-label">{t('signIn.emailLabel')}</span>
           <input
             className="field-input"
             type="email"
@@ -77,7 +79,7 @@ export function SignInPage() {
           />
         </label>
         <button className="button" type="submit" disabled={busy || email.length === 0}>
-          {busy ? 'Отправляем…' : 'Прислать ссылку'}
+          {busy ? t('signIn.sending') : t('signIn.send')}
         </button>
         {error && <p className="field-error">{error}</p>}
       </form>

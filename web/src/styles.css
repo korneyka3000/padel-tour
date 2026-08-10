@@ -994,3 +994,20 @@ a.card.visually-hidden {
   padding: 0.35rem 0.6rem;
   font-size: 0.9rem;
 }
+
+/* The language switch sits in the top bar; the current one is the bright one. */
+.langs {
+  display: inline-flex;
+  gap: 0.4rem;
+  margin-left: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.langs .link-button {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+}
+
+.langs .link-button[aria-pressed='true'] {
+  color: var(--ink);
+}

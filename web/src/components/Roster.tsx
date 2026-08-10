@@ -11,6 +11,7 @@ import { Link } from 'react-router'
 
 import type { Player } from '../lib/api'
 import { api } from '../lib/api'
+import { useT } from './Locale'
 
 export function Roster({
   groupId,
@@ -23,10 +24,12 @@ export function Roster({
   canEdit: boolean
   onChange: (players: Player[]) => void
 }) {
+  const t = useT()
+
   return (
     <section className="section" aria-labelledby="roster-heading">
       <div className="section-head">
-        <h2 id="roster-heading">Состав</h2>
+        <h2 id="roster-heading">{t('roster.title')}</h2>
         <span className="eyebrow">{players.length}</span>
       </div>
 
@@ -67,6 +70,7 @@ function Entry({
   onRenamed: (player: Player) => void
   onRemoved: () => void
 }) {
+  const t = useT()
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(player.name)
   const [busy, setBusy] = useState(false)
@@ -80,7 +84,7 @@ function Entry({
       onRenamed(await api.renamePlayer(player.id, name.trim()))
       setEditing(false)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Не переименовался')
+      setError(t.say(failure))
     } finally {
       setBusy(false)
     }
@@ -93,7 +97,7 @@ function Entry({
       await api.removePlayer(player.id)
       onRemoved()
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Не убрался')
+      setError(t.say(failure))
       setBusy(false)
     }
   }
@@ -107,11 +111,11 @@ function Entry({
           required
           maxLength={80}
           value={name}
-          aria-label={`Новое имя для ${player.name}`}
+          aria-label={t('roster.newNameFor', { name: player.name })}
           onChange={(event) => setName(event.target.value)}
         />
         <button className="button button-small" type="submit" disabled={busy}>
-          {busy ? '…' : 'ОК'}
+          {busy ? '…' : t('roster.ok')}
         </button>
         <button
           className="link-button"
@@ -122,7 +126,7 @@ function Entry({
             setError(null)
           }}
         >
-          отмена
+          {t('roster.cancel')}
         </button>
         {error && <span className="field-error">{error}</span>}
       </form>
@@ -137,7 +141,7 @@ function Entry({
       {canEdit && (
         <span className="roster-actions">
           <button className="link-button" type="button" onClick={() => setEditing(true)}>
-            переименовать
+            {t('roster.rename')}
           </button>
           <InviteLink playerId={player.id} name={player.name} />
           <button
@@ -146,7 +150,7 @@ function Entry({
             disabled={busy}
             onClick={() => void remove()}
           >
-            убрать
+            {t('roster.remove')}
           </button>
         </span>
       )}
@@ -156,6 +160,7 @@ function Entry({
 }
 
 function InviteLink({ playerId, name }: { playerId: string; name: string }) {
+  const t = useT()
   const [link, setLink] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -165,7 +170,7 @@ function InviteLink({ playerId, name }: { playerId: string; name: string }) {
       const invitation = await api.invite(playerId)
       setLink(`${window.location.origin}/i/${invitation.token}`)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Не выписалось')
+      setError(t.say(failure))
     }
   }
 
@@ -177,7 +182,7 @@ function InviteLink({ playerId, name }: { playerId: string; name: string }) {
         className="field-input field-copy"
         readOnly
         value={link}
-        aria-label={`Ссылка-приглашение для ${name}`}
+        aria-label={t('roster.inviteLinkFor', { name })}
         onFocus={(event) => event.target.select()}
       />
     )
@@ -185,7 +190,7 @@ function InviteLink({ playerId, name }: { playerId: string; name: string }) {
 
   return (
     <button className="link-button" type="button" onClick={() => void issue()}>
-      пригласить
+      {t('roster.invite')}
     </button>
   )
 }
@@ -197,6 +202,7 @@ function AddPlayer({
   groupId: string
   onAdded: (players: Player[]) => void
 }) {
+  const t = useT()
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -210,7 +216,7 @@ function AddPlayer({
       setName('')
       onAdded(group.players)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Не добавился')
+      setError(t.say(failure))
     } finally {
       setBusy(false)
     }
@@ -219,19 +225,19 @@ function AddPlayer({
   return (
     <form className="form form-inline" onSubmit={submit}>
       <label className="field">
-        <span className="field-label">Добавить игрока</span>
+        <span className="field-label">{t('roster.addPlayer')}</span>
         <input
           className="field-input"
           type="text"
           required
           maxLength={80}
-          placeholder="Аня"
+          placeholder={t('roster.addPlaceholder')}
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
       </label>
       <button className="button" type="submit" disabled={busy || name.trim().length === 0}>
-        {busy ? 'Добавляем…' : 'Добавить'}
+        {busy ? t('roster.adding') : t('roster.add')}
       </button>
       {error && <p className="field-error">{error}</p>}
     </form>

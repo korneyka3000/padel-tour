@@ -2,9 +2,17 @@
 
 import { useEffect, useState } from 'react'
 
+import { useT } from './Locale'
+
 interface State<T> {
   data: T | null
-  error: string | null
+  /**
+   * The failure itself, not a message.
+   *
+   * Flattening it to a string here would throw away the error code, and the code is the
+   * only thing a translation can work from — the sentence is English and rewordable.
+   */
+  error: unknown
   loading: boolean
 }
 
@@ -20,9 +28,7 @@ export function useAsync<T>(load: () => Promise<T>, deps: unknown[]): State<T> {
         if (live) setState({ data, error: null, loading: false })
       })
       .catch((error: unknown) => {
-        if (!live) return
-        const message = error instanceof Error ? error.message : 'Что-то пошло не так'
-        setState({ data: null, error: message, loading: false })
+        if (live) setState({ data: null, error, loading: false })
       })
 
     return () => {
@@ -44,14 +50,16 @@ export function Note({ title, children }: { title: string; children?: React.Reac
 }
 
 export function Loading() {
-  return <Note title="Загружаем" />
+  const t = useT()
+  return <Note title={t('async.loading')} />
 }
 
 /** Says what happened and what to do about it, without apologising. */
-export function Failed({ message }: { message: string }) {
+export function Failed({ failure }: { failure: unknown }) {
+  const t = useT()
   return (
-    <Note title="Не открылось">
-      {message}. Обновите страницу или проверьте ссылку.
+    <Note title={t('async.failedTitle')}>
+      {t('async.failedBody', { message: t.say(failure) })}
     </Note>
   )
 }
