@@ -1,3 +1,4 @@
+import { Analytics } from '@vercel/analytics/react'
 import { useEffect } from 'react'
 import { BrowserRouter, Route, Routes, useNavigate } from 'react-router'
 
@@ -37,6 +38,10 @@ export function App() {
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>
+          {/* Cookieless, and it sends nothing we choose — page paths and referrers only.
+              Inside the router so route changes count as visits; outside it the component
+              would only ever see the first page somebody landed on. */}
+          <Analytics />
         </SessionProvider>
       </LocaleProvider>
     </BrowserRouter>
