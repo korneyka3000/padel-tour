@@ -13,35 +13,20 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, status
-from pydantic import BaseModel, Field
 
 from padel_tour.services import add_player, create_group, list_players
 from padel_tour.services.groups import deactivate_player, get_group, rename_player
 
 from .deps import API_PREFIX, RequiredAccount, Session
-from .schemas import Group, GroupDetail, Player
+from .schemas import Group, GroupDetail, NewGroup, NewPlayer, Player, RenamedPlayer
 
 router = APIRouter(prefix=API_PREFIX, tags=["roster"])
-
-MAX_NAME = 80
-
-
-class NewGroup(BaseModel):
-    name: str = Field(min_length=1, max_length=MAX_NAME)
-
-
-class NewPlayer(BaseModel):
-    name: str = Field(min_length=1, max_length=MAX_NAME)
 
 
 @router.post("/groups", status_code=status.HTTP_201_CREATED)
 async def make_group(body: NewGroup, session: Session, actor: RequiredAccount) -> Group:
     """Start a group. You own it."""
     return Group.of(await create_group(session, body.name, owner_account_id=actor.id))
-
-
-class RenamedPlayer(BaseModel):
-    name: str = Field(min_length=1, max_length=MAX_NAME)
 
 
 @router.patch("/players/{player_id}")

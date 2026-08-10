@@ -14,7 +14,6 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, Request, Response, status
-from pydantic import BaseModel, EmailStr
 
 from padel_tour.db import Account
 from padel_tour.services import (
@@ -29,7 +28,7 @@ from padel_tour.services.mail import Mailer, mailer_from_env
 from padel_tour.settings import base_url, settings
 
 from .deps import API_PREFIX, SESSION_COOKIE, RequiredAccount, Session
-from .schemas import Group
+from .schemas import Accepted, EnterRequest, Group, LaunchRequest, MagicLinkRequest, Me
 
 router = APIRouter(prefix=f"{API_PREFIX}/auth", tags=["auth"])
 
@@ -61,32 +60,6 @@ def secure_cookies() -> bool:
 
 
 # ----------------------------------------------------------------------------------- wire
-
-
-class MagicLinkRequest(BaseModel):
-    email: EmailStr
-
-
-class LaunchRequest(BaseModel):
-    """The opaque string Telegram hands a Mini App. Never trusted before it is verified."""
-
-    init_data: str
-
-
-class EnterRequest(BaseModel):
-    token: str
-
-
-class Accepted(BaseModel):
-    """Deliberately says nothing about whether the address is known."""
-
-    detail: str = "Если такой адрес есть, письмо отправлено"
-
-
-class Me(BaseModel):
-    id: str
-    display_name: str | None
-    groups: list[Group]
 
 
 # ------------------------------------------------------------------------------ endpoints

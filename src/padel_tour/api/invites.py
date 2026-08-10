@@ -13,25 +13,13 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter
-from pydantic import BaseModel
 
 from padel_tour.services import create_invite, peek_invite, redeem_invite
 
 from .deps import API_PREFIX, RequiredAccount, Session
-from .schemas import Player
+from .schemas import Invitation, Player, RedeemRequest
 
 router = APIRouter(prefix=API_PREFIX, tags=["invites"])
-
-
-class Invitation(BaseModel):
-    """What the owner hands over. The token is shown once and never stored in the clear."""
-
-    token: str
-    player: Player
-
-
-class RedeemRequest(BaseModel):
-    token: str
 
 
 @router.post("/players/{player_id}/invite")

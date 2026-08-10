@@ -1,9 +1,8 @@
-"""What the API puts on the wire.
+"""A tournament, on the wire.
 
-Deliberately separate from the service layer's views. A ``TournamentView`` carries a whole
-``TournamentState`` for callers that need to ask the engine something; none of that belongs
-in JSON. Keeping the two apart also means the wire format can change without dragging the
-service layer with it.
+The largest of these files, and deliberately so: a tournament is one thing, and splitting
+its rounds from its standings from its chart would scatter a single JSON document across
+four modules to make each of them small.
 """
 
 from __future__ import annotations
@@ -14,44 +13,10 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from padel_tour.engine import Format, PairingPattern
-from padel_tour.services import (
-    GroupView,
-    PlayerView,
-    RoundView,
-    TournamentSummary,
-    TournamentView,
-    Viewing,
-)
+from padel_tour.services import RoundView, TournamentSummary, TournamentView, Viewing
 
-
-class Group(BaseModel):
-    id: uuid.UUID
-    name: str
-    player_count: int
-
-    @classmethod
-    def of(cls, view: GroupView) -> Group:
-        return cls(id=view.id, name=view.name, player_count=view.player_count)
-
-
-class Player(BaseModel):
-    id: uuid.UUID
-    name: str
-    is_active: bool
-
-    @classmethod
-    def of(cls, view: PlayerView) -> Player:
-        return cls(id=view.id, name=view.name, is_active=view.is_active)
-
-
-class GroupDetail(BaseModel):
-    id: uuid.UUID
-    name: str
-    players: list[Player]
-    is_owner: bool = Field(
-        default=False,
-        description="Whether the caller keeps this roster. Hides controls that would 403.",
-    )
+#: A sane ceiling on a Mexicano. The engine has no opinion; a form field does need one.
+MAX_ROUNDS = 40
 
 
 class Match(BaseModel):
@@ -243,37 +208,3 @@ class TournamentCard(BaseModel):
             created_at=summary.created_at,
             winner_name=summary.winner_name,
         )
-
-
-class PlayerProfile(BaseModel):
-    """A player's record across every tournament they have played."""
-
-    id: uuid.UUID
-    name: str
-    tournaments: int
-    matches: int
-    wins: int
-    points_for: int
-    average_points: float = Field(description="Points per match played")
-    best_rank: int | None
-    podiums: int
-    history: list[TournamentCard]
-
-
-class Health(BaseModel):
-    status: str
-    database: str
-
-
-class ErrorBody(BaseModel):
-    """What a refusal looks like.
-
-    Three fields because two audiences read it. ``detail`` is English and goes in the log;
-    ``code`` and ``params`` let an interface say the same thing in its own language, with
-    its own agreement rules. A client that does not know a code falls back to ``detail`` —
-    an old page against a new server should show an awkward sentence, not an empty one.
-    """
-
-    detail: str
-    code: str = ""
-    params: dict[str, object] = Field(default_factory=dict)
