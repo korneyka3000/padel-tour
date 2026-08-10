@@ -44,10 +44,16 @@ cli = typer.Typer(
     add_completion=False,
 )
 
+#: What Telegram offers when somebody types a slash.
+#:
+#: Only a menu — an unlisted command still reaches its handler — but a command nobody can
+#: discover is a command nobody uses, and /login was exactly that.
 COMMANDS = [
     BotCommand(command="start", description="Начать и показать текущий экран"),
     BotCommand(command="add", description="Добавить игроков: /add Аня, Боря"),
+    BotCommand(command="rename", description="Переименовать: /rename Аня = Анна"),
     BotCommand(command="tournament", description="Показать экран турнира заново"),
+    BotCommand(command="login", description="Ссылка для входа на сайт (в личке)"),
 ]
 
 #: Length of a generated webhook secret, in bytes before hex encoding.

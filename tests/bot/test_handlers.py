@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from conftest import NAMES
-from padel_tour.bot import handlers, screens
+from padel_tour.bot import app, handlers, screens
 from padel_tour.bot.callbacks import Action, Callback, Screen, plain, points, show, toggle, winner
 from padel_tour.bot.wording import say
 from padel_tour.db import PROVIDER_TELEGRAM, Tournament
@@ -599,3 +599,23 @@ async def test_the_home_screen_stacks_the_roster(session: AsyncSession, bot: Fak
 
     text = bot.edited[-1].text
     assert all(f"· {name}" in text for name in NAMES)
+
+
+def test_every_command_the_bot_answers_is_in_its_menu() -> None:
+    """A command nobody can discover is a command nobody uses.
+
+    /login shipped without a menu entry and went unnoticed until somebody asked why it did
+    not work — it did, they just had no way to find out it existed.
+    """
+    answered = {
+        str(command)
+        for handler in handlers.router.message.handlers
+        for filt in handler.filters or []
+        for command in getattr(getattr(filt, "callback", None), "commands", ()) or ()
+    }
+    listed = {command.command for command in app.COMMANDS}
+
+    # Guard the guard: a traversal that finds nothing would pass this test forever.
+    assert answered, "found no command filters — the introspection has drifted"
+
+    assert answered <= listed, f"not in the menu: {sorted(answered - listed)}"
