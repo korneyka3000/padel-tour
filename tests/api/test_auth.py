@@ -9,17 +9,27 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from fastapi import Request
+
 from conftest import OWNER_EMAIL, seed_tournament, sign_in
-from padel_tour.api.auth import link_base, secure_cookies
-from padel_tour.api.deps import SESSION_COOKIE, current_account
+from padel_tour.api.auth import link_base
+from padel_tour.api.deps import (
+    SECURE_SESSION_COOKIE,
+    SESSION_COOKIE,
+    current_account,
+    secure_cookies,
+    session_cookie_name,
+)
 from padel_tour.db import PROVIDER_EMAIL
 from padel_tour.services import (
     ANONYMOUS,
+    Anonymous,
     account_for_identity,
     add_player,
     create_group,
     create_invite,
     ensure_identity,
+    open_session,
 )
 
 if TYPE_CHECKING:
@@ -315,10 +325,59 @@ def test_a_developer_machine_does_not_demand_tls(monkeypatch: pytest.MonkeyPatch
     assert not secure_cookies()
 
 
+def _carrying(**cookies: str) -> Request:
+    """A bare request with cookies and nothing else — all this dependency reads."""
+    raw = "; ".join(f"{name}={value}" for name, value in cookies.items())
+    headers = [(b"cookie", raw.encode())] if raw else []
+    return Request({"type": "http", "headers": headers})
+
+
 async def test_no_cookie_resolves_to_anonymous_not_none(session: AsyncSession) -> None:
     """Pinned at the source, not just through HTTP.
 
     ``None`` reaches the service layer as *system*. This dependency must never produce one.
     """
-    assert await current_account(session, None) is ANONYMOUS
-    assert await current_account(session, "not-a-real-session") is ANONYMOUS
+    assert await current_account(_carrying(), session) is ANONYMOUS
+    assert await current_account(_carrying(pt_session="nope"), session) is ANONYMOUS
+
+
+async def test_the_hardened_cookie_name_is_read(session: AsyncSession) -> None:
+    """What production sends once ``__Host-`` is in use."""
+    account = await ensure_identity(session, PROVIDER_EMAIL, "anya@example.test")
+    token = await open_session(session, account)
+
+    found = await current_account(_carrying(**{SECURE_SESSION_COOKIE: token}), session)
+
+    assert not isinstance(found, Anonymous)
+    assert found.id == account.id
+
+
+async def test_a_cookie_issued_under_the_old_name_still_works(session: AsyncSession) -> None:
+    """The reason both names are read.
+
+    Renaming the cookie is not worth signing out everyone who was already signed in, and a
+    browser holding the old one has no way to learn the new one except by signing in again.
+    """
+    account = await ensure_identity(session, PROVIDER_EMAIL, "borya@example.test")
+    token = await open_session(session, account)
+
+    found = await current_account(_carrying(pt_session=token), session)
+
+    assert not isinstance(found, Anonymous)
+    assert found.id == account.id
+
+
+def test_the_hardened_name_is_only_used_where_it_is_legal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A browser drops a ``__Host-`` cookie that is not Secure, so http must not send one.
+
+    Getting this backwards is invisible in a test that only checks the name: the cookie is
+    set, the response looks right, and every subsequent request arrives signed out.
+    """
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://yo-padel-tour.vercel.app")
+    assert session_cookie_name() == SECURE_SESSION_COOKIE
+
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+    monkeypatch.delenv("VERCEL_PROJECT_PRODUCTION_URL", raising=False)
+    assert session_cookie_name() == SESSION_COOKIE

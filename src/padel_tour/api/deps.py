@@ -12,13 +12,14 @@ from collections.abc import AsyncIterator
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import Cookie, Depends, Request
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from padel_tour.db import Account, create_engine, create_session_factory, database_url
 from padel_tour.services import account_for_session
 from padel_tour.services.errors import NotSignedInError
 from padel_tour.services.permissions import ANONYMOUS, Anonymous
+from padel_tour.settings import base_url
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,35 @@ API_PREFIX = "/api"
 #: The session cookie. HttpOnly so script cannot read it, SameSite=Lax rather than Strict
 #: because arriving from a link in an email must still carry it.
 SESSION_COOKIE = "pt_session"
+
+#: The same cookie where TLS makes the hardened name legal.
+#:
+#: ``__Host-`` is not decoration: browsers refuse to store a cookie under this prefix unless
+#: it is Secure, host-only, and path ``/``. That last pair is the useful part — no sibling
+#: host and no subdomain can write it, so nothing can plant a session on somebody. Today the
+#: deployment has no subdomains and the risk is theoretical; the day it gets a custom domain
+#: it stops being, and this is not a change anyone would remember to make then.
+SECURE_SESSION_COOKIE = f"__Host-{SESSION_COOKIE}"
+
+
+def secure_cookies() -> bool:
+    """Off only where there is no TLS to require: a developer's machine."""
+    return base_url().startswith("https://")
+
+
+def session_cookie_name() -> str:
+    """What to write. The prefixed name needs Secure, so plain ``http`` cannot use it."""
+    return SECURE_SESSION_COOKIE if secure_cookies() else SESSION_COOKIE
+
+
+def read_session_cookie(request: Request) -> str | None:
+    """What to read: the hardened name first, the plain one after.
+
+    Both, because they coexist twice over — local development never uses the prefix, and
+    every session issued before it existed is still in a browser under the old name. Reading
+    both is what makes that a rename rather than a forced sign-out for everyone.
+    """
+    return request.cookies.get(SECURE_SESSION_COOKIE) or request.cookies.get(SESSION_COOKIE)
 
 
 @lru_cache(maxsize=1)
@@ -78,10 +108,7 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
 Session = Annotated[AsyncSession, Depends(get_session)]
 
 
-async def current_account(
-    session: Session,
-    pt_session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-) -> Account | Anonymous:
+async def current_account(request: Request, session: Session) -> Account | Anonymous:
     """Who is making this request.
 
     Never ``None``: to the service layer ``None`` means *system*, the trusted caller behind
@@ -92,9 +119,10 @@ async def current_account(
     anyone holding its link, so most endpoints want to know who is asking without insisting
     on an answer.
     """
-    if not pt_session:
+    token = read_session_cookie(request)
+    if not token:
         return ANONYMOUS
-    return await account_for_session(session, pt_session) or ANONYMOUS
+    return await account_for_session(session, token) or ANONYMOUS
 
 
 CurrentAccount = Annotated[Account | Anonymous, Depends(current_account)]

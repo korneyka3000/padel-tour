@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from padel_tour.db import Account, Identity, LoginSession, MagicLink
 
@@ -92,4 +92,25 @@ async def sessions_of(session: AsyncSession, account_id: uuid.UUID) -> Sequence[
 async def revoke(session: AsyncSession, row: LoginSession) -> None:
     """Delete one sign-in session. Flushed, not committed — see :func:`save`."""
     await session.delete(row)
+    await session.flush()
+
+
+async def purge_dead_sessions(
+    session: AsyncSession, *, expired_before: datetime, idle_since: datetime
+) -> None:
+    """Drop every session past either of its two deadlines, whoever it belonged to.
+
+    Both cut-offs are arguments rather than constants here: *how long* is policy, and policy
+    lives in the service. This only knows that there are two ways for a session to be over.
+
+    Not tidiness. The table is the answer to "where can this person still be signed in", and
+    an answer padded with dead rows is not one. Called when a session opens rather than on a
+    schedule, because sign-ins are rare, both columns are cheap to scan at this size, and a
+    cron job is one more thing that can quietly stop running.
+    """
+    await session.execute(
+        delete(LoginSession).where(
+            (LoginSession.expires_at < expired_before) | (LoginSession.last_used_at < idle_since)
+        )
+    )
     await session.flush()

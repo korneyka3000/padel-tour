@@ -151,19 +151,34 @@ class LoginSession(Base):
     """An active sign-in.
 
     Named for the table rather than for `Session`, which every module here already means
-    as a database session. Kept server-side rather than as a signed token so that signing
-    out of every device is possible.
+    as a database session.
+
+    Server-side rather than a signed token, and that is the design rather than a step
+    towards one. A JWT would save the lookup below — but every endpoint here reads the
+    database anyway, so there is no lookup to save, and the price would be that a stolen
+    token stays valid until it expires. These rows can be deleted: one device, or all of
+    them, immediately.
     """
 
     __tablename__ = "sessions"
-    __table_args__ = (Index("uq_session_token", "token_hash", unique=True),)
+    __table_args__ = (
+        Index("uq_session_token", "token_hash", unique=True),
+        # The purge on sign-in filters on this column across the whole table.
+        Index("ix_sessions_last_used_at", "last_used_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_id)
     account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"))
     #: Only ever the hash. A leaked database does not let anyone sign in.
     token_hash: Mapped[str] = mapped_column(String(64))
+    #: The absolute deadline, fixed when the session opens. Never extended — a session that
+    #: renewed itself on use would have no deadline at all.
     expires_at: Mapped[datetime] = mapped_column(UtcDateTime)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
+    #: The other deadline: go quiet for long enough and the session dies early. Without it a
+    #: cookie copied off a laptop is good for the whole thirty days, whether or not its owner
+    #: ever comes back. Written lazily — see ``TOUCH_AFTER`` in ``services.accounts``.
+    last_used_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
 
 
 class MagicLink(Base):

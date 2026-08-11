@@ -18,6 +18,7 @@ from .tokens import hash_token, issue
 
 if TYPE_CHECKING:
     import uuid
+    from datetime import datetime
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,8 +27,25 @@ if TYPE_CHECKING:
 #: Long enough to walk to your inbox, short enough that a forwarded email is not a key.
 MAGIC_LINK_TTL = timedelta(minutes=15)
 
-#: A padel group plays weekly; signing in every week would be its own kind of friction.
+#: The absolute life of a session, counted from the sign-in and never extended. A padel
+#: group plays weekly; signing in every week would be its own kind of friction.
 SESSION_TTL = timedelta(days=30)
+
+#: The other limit: a session nobody uses for this long is over, whatever its deadline says.
+#:
+#: The two together are the point. Without the absolute one a session could renew itself
+#: forever; without this one a cookie copied off an unlocked laptop is good for a month even
+#: though its owner never came back. Two weeks clears a holiday, which is the longest gap a
+#: weekly game reasonably produces.
+SESSION_IDLE_TTL = timedelta(days=14)
+
+#: How stale ``last_used_at`` may get before a read bothers to write.
+#:
+#: Recording the exact moment of every request would put a write behind every authenticated
+#: read, on a serverless function, over a transatlantic link. The column decides between
+#: "days ago" and "weeks ago", so an hour of imprecision costs nothing and this costs at most
+#: one write an hour per session.
+TOUCH_AFTER = timedelta(hours=1)
 
 #: One link per address per minute. The address is unverified by definition, so without
 #: this the form is a way to fill a stranger's inbox.
@@ -156,19 +174,43 @@ async def redeem_magic_link(session: AsyncSession, raw_token: str) -> Account:
 
 async def open_session(session: AsyncSession, account: Account) -> str:
     """Start a signed-in session and return the token for the cookie."""
+    now = utc_now()
+    await repositories.purge_dead_sessions(
+        session, expired_before=now, idle_since=now - SESSION_IDLE_TTL
+    )
+
     raw, hashed = issue()
     await repositories.save(
         session,
-        LoginSession(account_id=account.id, token_hash=hashed, expires_at=utc_now() + SESSION_TTL),
+        LoginSession(
+            account_id=account.id,
+            token_hash=hashed,
+            expires_at=now + SESSION_TTL,
+            last_used_at=now,
+        ),
     )
     return raw
 
 
+def _is_live(row: LoginSession, now: datetime) -> bool:
+    """Both deadlines, and a session has to clear both."""
+    return row.expires_at > now and row.last_used_at > now - SESSION_IDLE_TTL
+
+
 async def account_for_session(session: AsyncSession, raw_token: str) -> Account | None:
-    """Who is signed in, if anyone. An expired session is nobody."""
+    """Who is signed in, if anyone. A session past either deadline is nobody.
+
+    Reading also counts as using, so this writes — rarely. See :data:`TOUCH_AFTER`.
+    """
     row = await repositories.login_session_by_token(session, hash_token(raw_token))
-    if row is None or row.expires_at <= utc_now():
+    now = utc_now()
+    if row is None or not _is_live(row, now):
         return None
+
+    if now - row.last_used_at > TOUCH_AFTER:
+        row.last_used_at = now
+        await session.flush()
+
     return await repositories.account_by_id(session, row.account_id)
 
 

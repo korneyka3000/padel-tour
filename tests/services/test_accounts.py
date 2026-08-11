@@ -14,6 +14,8 @@ from sqlalchemy import select, update
 
 from padel_tour.db import PROVIDER_EMAIL, PROVIDER_TELEGRAM, LoginSession, MagicLink, utc_now
 from padel_tour.services.accounts import (
+    SESSION_IDLE_TTL,
+    TOUCH_AFTER,
     account_for_identity,
     account_for_session,
     close_all_sessions,
@@ -175,7 +177,11 @@ async def test_signing_out_of_an_unknown_session_is_not_an_error(
 
 
 async def test_signing_out_everywhere(session: AsyncSession) -> None:
-    """The reason sessions are rows rather than signed tokens."""
+    """The reason sessions are rows rather than signed tokens.
+
+    A JWT cannot do this. That is the whole trade, and it is why the lookup above is not a
+    cost to be optimised away — it is what buys this.
+    """
     account = await ensure_identity(session, PROVIDER_EMAIL, EMAIL)
     phone = await open_session(session, account)
     laptop = await open_session(session, account)
@@ -184,6 +190,106 @@ async def test_signing_out_everywhere(session: AsyncSession) -> None:
 
     assert await account_for_session(session, phone) is None
     assert await account_for_session(session, laptop) is None
+
+
+# ------------------------------------------------------------------------- the idle limit
+#
+# Two deadlines, and a session has to clear both. The absolute one caps how long a sign-in
+# can ever last; this one ends a session nobody is using, so a copied cookie is not good for
+# a month after its owner stopped coming back.
+
+
+async def _went_quiet(session: AsyncSession, *, ago: timedelta) -> None:
+    await session.execute(update(LoginSession).values(last_used_at=utc_now() - ago))
+
+
+async def test_a_session_nobody_has_used_is_nobody(session: AsyncSession) -> None:
+    account = await ensure_identity(session, PROVIDER_EMAIL, EMAIL)
+    token = await open_session(session, account)
+    await _went_quiet(session, ago=SESSION_IDLE_TTL + timedelta(minutes=1))
+
+    assert await account_for_session(session, token) is None
+
+
+async def test_a_session_still_in_use_survives(session: AsyncSession) -> None:
+    """The counterpart, and the one that matters: a weekly game must not sign anyone out."""
+    account = await ensure_identity(session, PROVIDER_EMAIL, EMAIL)
+    token = await open_session(session, account)
+    await _went_quiet(session, ago=SESSION_IDLE_TTL - timedelta(days=1))
+
+    assert await account_for_session(session, token) is not None
+
+
+async def test_using_a_session_pushes_the_idle_deadline_back(session: AsyncSession) -> None:
+    """Otherwise the limit is not "idle for two weeks", it is "two weeks" a second time.
+
+    Somebody a day from being signed out, who then uses the app, must get the full window
+    back — that is the difference between an idle limit and a shorter absolute one.
+    """
+    account = await ensure_identity(session, PROVIDER_EMAIL, EMAIL)
+    token = await open_session(session, account)
+    await _went_quiet(session, ago=SESSION_IDLE_TTL - timedelta(days=1))
+
+    await account_for_session(session, token)
+
+    fresh = (await session.execute(select(LoginSession))).scalars().one().last_used_at
+    assert utc_now() - fresh < TOUCH_AFTER
+
+
+async def test_a_read_does_not_write_on_every_request(session: AsyncSession) -> None:
+    """One write per hour per session, not one per request.
+
+    Every authenticated request goes through here, on a serverless function, over a link to
+    another continent. Recording the exact moment of each would put a write behind every
+    read to gain precision the column has no use for.
+    """
+    account = await ensure_identity(session, PROVIDER_EMAIL, EMAIL)
+    token = await open_session(session, account)
+    before = (await session.execute(select(LoginSession))).scalars().one().last_used_at
+
+    await account_for_session(session, token)
+
+    after = (await session.execute(select(LoginSession))).scalars().one().last_used_at
+    assert after == before
+
+
+async def test_the_absolute_deadline_is_never_extended(session: AsyncSession) -> None:
+    """A session that renewed itself on use would have no deadline at all."""
+    account = await ensure_identity(session, PROVIDER_EMAIL, EMAIL)
+    token = await open_session(session, account)
+    deadline = (await session.execute(select(LoginSession))).scalars().one().expires_at
+
+    await _went_quiet(session, ago=TOUCH_AFTER + timedelta(minutes=1))
+    await account_for_session(session, token)
+
+    assert (await session.execute(select(LoginSession))).scalars().one().expires_at == deadline
+
+
+async def test_a_long_gap_is_recorded(session: AsyncSession) -> None:
+    """The write does happen once the column is stale enough to be worth it."""
+    account = await ensure_identity(session, PROVIDER_EMAIL, EMAIL)
+    token = await open_session(session, account)
+    await _went_quiet(session, ago=TOUCH_AFTER + timedelta(minutes=1))
+
+    await account_for_session(session, token)
+
+    fresh = (await session.execute(select(LoginSession))).scalars().one().last_used_at
+    assert utc_now() - fresh < TOUCH_AFTER
+
+
+async def test_signing_in_clears_out_sessions_that_are_over(session: AsyncSession) -> None:
+    """The table answers "where am I still signed in". Dead rows are not an answer.
+
+    Swept on sign-in rather than on a schedule: sign-ins are rare, and a cron job is one more
+    thing that can quietly stop running.
+    """
+    account = await ensure_identity(session, PROVIDER_EMAIL, EMAIL)
+    await open_session(session, account)
+    await _went_quiet(session, ago=SESSION_IDLE_TTL + timedelta(days=1))
+
+    await open_session(session, account)
+
+    assert len((await session.execute(select(LoginSession))).scalars().all()) == 1
 
 
 # ---------------------------------------------------------------------------- identities
