@@ -53,10 +53,15 @@ def fingerprint(view: TournamentView) -> dict[str, object]:
             (row.rank, row.name, row.points_for, row.points_against, row.wins)
             for row in view.standings
         ],
-        "progression": {
-            str(player): [(p.round_no, p.points_for, p.cumulative_points, p.rank) for p in points]
-            for player, points in sorted(view.progression.items(), key=lambda kv: str(kv[0]))
-        },
+        # Order is part of what must survive: the chart is drawn in standing order, so a
+        # reload that returned the same lines shuffled would be a different picture.
+        "progression": [
+            (
+                line.name,
+                [(p.round_no, p.points_for, p.cumulative_points, p.rank) for p in line.points],
+            )
+            for line in view.progression
+        ],
     }
 
 

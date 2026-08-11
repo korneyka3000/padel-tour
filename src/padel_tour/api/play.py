@@ -43,7 +43,7 @@ async def _rendered(session: AsyncSession, view: TournamentView, actor: Account)
     Every write goes out through here, so no route can forget the part that decides which
     buttons the next screen is allowed to draw.
     """
-    return Tournament.of(view, await viewing(session, actor, view))
+    return view.seen_by(await viewing(session, actor, view))
 
 
 @router.post("/groups/{group_id}/tournaments", status_code=status.HTTP_201_CREATED)

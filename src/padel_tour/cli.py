@@ -135,7 +135,7 @@ def show_table(view: TournamentView) -> None:
 def show_progress(view: TournamentView) -> None:
     """Cumulative points round by round, plus how each player moved through the ranks."""
     series = view.progression
-    played_rounds = [point.round_no for point in next(iter(series.values()), ())]
+    played_rounds = [point.round_no for point in series[0].points] if series else []
     if not played_rounds:
         return
 
@@ -149,12 +149,12 @@ def show_progress(view: TournamentView) -> None:
         table.add_column(f"R{number}", justify="right")
     table.add_column("rank path")
 
-    for row in view.standings:
-        points = series[row.player_id]
+    # Already ordered by standing, and already named — the join the view does once.
+    for line in series:
         table.add_row(
-            row.name,
-            *(str(point.cumulative_points) for point in points),
-            "[dim]→[/dim]".join(str(point.rank) for point in points),
+            line.name,
+            *(str(point.cumulative_points) for point in line.points),
+            "[dim]→[/dim]".join(str(point.rank) for point in line.points),
         )
     console.print()
     console.print(table)

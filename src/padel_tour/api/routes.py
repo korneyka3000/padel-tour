@@ -154,8 +154,7 @@ async def read_archive(
 ) -> list[TournamentCard]:
     await get_group(session, group_id)
     await require_member(session, actor, group_id)
-    summaries = await list_tournaments(session, group_id, limit=limit, offset=offset)
-    return [TournamentCard.of(summary) for summary in summaries]
+    return await list_tournaments(session, group_id, limit=limit, offset=offset)
 
 
 @router.get(
@@ -176,7 +175,7 @@ async def read_active(
     view = await active_tournament(session, group_id)
     if view is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-    return Tournament.of(view, await viewing(session, actor, view))
+    return view.seen_by(await viewing(session, actor, view))
 
 
 @router.get("/tournaments/{tournament_id}")
@@ -190,7 +189,7 @@ async def read_tournament(
     shown.
     """
     view = await get_tournament(session, tournament_id)
-    return Tournament.of(view, await viewing(session, actor, view))
+    return view.seen_by(await viewing(session, actor, view))
 
 
 @router.get("/players/{player_id}")
@@ -210,7 +209,7 @@ async def read_player(
         average_points=stats.average_points,
         best_rank=stats.best_rank,
         podiums=stats.podiums,
-        history=[TournamentCard.of(entry) for entry in stats.history],
+        history=stats.history,
     )
 
 

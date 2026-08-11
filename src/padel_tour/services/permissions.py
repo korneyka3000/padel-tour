@@ -15,7 +15,6 @@ on a route — the bot calls those functions directly and must not be able to sk
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
 from padel_tour import repositories
@@ -32,6 +31,7 @@ from .errors import (
     NotTheOwnerError,
     TournamentNotFoundError,
 )
+from .views import Viewing
 
 if TYPE_CHECKING:
     import uuid
@@ -41,18 +41,6 @@ if TYPE_CHECKING:
     from padel_tour.db import Account
 
     from .views import TournamentView
-
-
-@dataclass(frozen=True, slots=True)
-class Viewing:
-    """Where one caller stands in one tournament. All false is a stranger, and correct."""
-
-    is_member: bool = False
-    is_organiser: bool = False
-    #: The player this account holds here, or ``None`` if they have claimed none.
-    plays_as: uuid.UUID | None = None
-    #: Nobody organises this tournament, so it belongs to whoever is in the group.
-    anyone_may_score: bool = False
 
 
 class Anonymous:

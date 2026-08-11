@@ -1,210 +1,54 @@
 """A tournament, on the wire.
 
-The largest of these files, and deliberately so: a tournament is one thing, and splitting
-its rounds from its standings from its chart would scatter a single JSON document across
-four modules to make each of them small.
+Almost nothing left. This file used to hold a parallel set of models — ``Tournament``,
+``Round``, ``Match``, ``Standing``, ``PlayerProgress`` — each mirroring a view in
+``services.views`` field for field, plus the ``of()`` classmethods that copied one into the
+other. ``Tournament.of`` was fifty lines whose only possible behaviour was to agree with the
+class it was copying from, and whose only possible bug was not to.
+
+The views are the wire format now. Fields a client must not see are marked
+``Field(exclude=True)`` on the view itself, which is both shorter and stronger: the old
+arrangement dropped ``organiser_account_id`` by not mentioning it, so adding a field to the
+view and forgetting to add it here was invisible, while adding a *secret* to the view and
+forgetting to exclude it here was a leak.
+
+The names below are aliases, kept because a route reads better returning ``Tournament`` than
+``TournamentView`` and because they are what the OpenAPI document and every import already
+say.
 """
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime
-
-from pydantic import BaseModel, Field
-
-from padel_tour.engine import Format, PairingPattern
-from padel_tour.services import RoundView, TournamentSummary, TournamentView, Viewing
+from padel_tour.services import (
+    MatchView,
+    PlayerProgress,
+    ProgressPointView,
+    RoundView,
+    StandingView,
+    TournamentSummary,
+    TournamentView,
+    Viewing,
+)
 
 #: A sane ceiling on a Mexicano. The engine has no opinion; a form field does need one.
 MAX_ROUNDS = 40
 
+Tournament = TournamentView
+TournamentCard = TournamentSummary
+Match = MatchView
+Round = RoundView
+Standing = StandingView
+ProgressPoint = ProgressPointView
+Viewer = Viewing
 
-class Match(BaseModel):
-    court: int
-    team_a: tuple[str, str]
-    team_b: tuple[str, str]
-    score_a: int | None
-    score_b: int | None
-    team_a_ids: tuple[uuid.UUID, uuid.UUID] = Field(
-        description="The same players by id, for deciding whether this court is yours to score"
-    )
-    team_b_ids: tuple[uuid.UUID, uuid.UUID]
-
-
-class Round(BaseModel):
-    number: int
-    matches: list[Match]
-    complete: bool
-
-    @classmethod
-    def of(cls, view: RoundView) -> Round:
-        return cls(
-            number=view.number,
-            complete=view.complete,
-            matches=[
-                Match(
-                    court=match.court,
-                    team_a=match.team_a,
-                    team_b=match.team_b,
-                    score_a=match.score_a,
-                    score_b=match.score_b,
-                    team_a_ids=match.team_a_ids,
-                    team_b_ids=match.team_b_ids,
-                )
-                for match in view.matches
-            ],
-        )
-
-
-class Standing(BaseModel):
-    rank: int
-    player_id: uuid.UUID
-    name: str
-    played: int
-    wins: int
-    draws: int
-    losses: int
-    points_for: int
-    points_against: int
-    diff: int
-
-
-class ProgressPoint(BaseModel):
-    """One point on the round-by-round chart."""
-
-    round_no: int
-    points_for: int
-    cumulative_points: int
-    rank: int
-
-
-class PlayerProgress(BaseModel):
-    """One line on the chart, named so the client does not have to join anything."""
-
-    player_id: uuid.UUID
-    name: str
-    points: list[ProgressPoint]
-
-
-class Viewer(BaseModel):
-    """Where the caller stands, so the screen can offer only what the server will accept.
-
-    Four inputs rather than a verdict per match. The rule behind them lives in
-    ``services.permissions.require_can_score`` and has branches the client cannot infer from
-    a boolean — and a boolean per court would be one field per court, every one of them
-    stale the moment a Mexicano draws its next round.
-    """
-
-    is_member: bool = False
-    is_organiser: bool = False
-    plays_as: uuid.UUID | None = Field(
-        default=None, description="The player you are in this tournament, if you have claimed one"
-    )
-    anyone_may_score: bool = Field(
-        default=False, description="No organiser, so the group scores it between them"
-    )
-
-    @classmethod
-    def of(cls, seen: Viewing) -> Viewer:
-        return cls(
-            is_member=seen.is_member,
-            is_organiser=seen.is_organiser,
-            plays_as=seen.plays_as,
-            anyone_may_score=seen.anyone_may_score,
-        )
-
-
-class Tournament(BaseModel):
-    id: uuid.UUID
-    group_id: uuid.UUID
-    format: Format
-    points_per_match: int
-    pairing_pattern: PairingPattern
-    total_rounds: int
-    rounds_played: int
-    finished: bool
-    created_at: datetime
-    finished_at: datetime | None
-    rounds: list[Round]
-    standings: list[Standing]
-    progression: list[PlayerProgress]
-    viewer: Viewer = Field(
-        default_factory=Viewer,
-        description="Defaults to a stranger, which is what a link-holder is",
-    )
-
-    @classmethod
-    def of(cls, view: TournamentView, seen: Viewing | None = None) -> Tournament:
-        return cls(
-            viewer=Viewer() if seen is None else Viewer.of(seen),
-            id=view.id,
-            group_id=view.group_id,
-            format=view.format,
-            points_per_match=view.points_per_match,
-            pairing_pattern=view.pairing_pattern,
-            total_rounds=view.total_rounds,
-            rounds_played=sum(1 for rnd in view.rounds if rnd.complete),
-            finished=view.finished,
-            created_at=view.created_at,
-            finished_at=view.finished_at,
-            rounds=[Round.of(rnd) for rnd in view.rounds],
-            standings=[
-                Standing(
-                    rank=row.rank,
-                    player_id=row.player_id,
-                    name=row.name,
-                    played=row.played,
-                    wins=row.wins,
-                    draws=row.draws,
-                    losses=row.losses,
-                    points_for=row.points_for,
-                    points_against=row.points_against,
-                    diff=row.diff,
-                )
-                for row in view.standings
-            ],
-            # Ordered by standing, so the chart's legend matches the table without the
-            # client having to sort anything.
-            progression=[
-                PlayerProgress(
-                    player_id=row.player_id,
-                    name=row.name,
-                    points=[
-                        ProgressPoint(
-                            round_no=point.round_no,
-                            points_for=point.points_for,
-                            cumulative_points=point.cumulative_points,
-                            rank=point.rank,
-                        )
-                        for point in view.progression.get(row.player_id, ())
-                    ],
-                )
-                for row in view.standings
-            ],
-        )
-
-
-class TournamentCard(BaseModel):
-    """An archive entry — enough for a list, no rounds or standings."""
-
-    id: uuid.UUID
-    format: Format
-    finished: bool
-    player_count: int
-    rounds_played: int
-    total_rounds: int
-    created_at: datetime
-    winner_name: str | None
-
-    @classmethod
-    def of(cls, summary: TournamentSummary) -> TournamentCard:
-        return cls(
-            id=summary.id,
-            format=summary.format,
-            finished=summary.finished,
-            player_count=summary.player_count,
-            rounds_played=summary.rounds_played,
-            total_rounds=summary.total_rounds,
-            created_at=summary.created_at,
-            winner_name=summary.winner_name,
-        )
+__all__ = [
+    "MAX_ROUNDS",
+    "Match",
+    "PlayerProgress",
+    "ProgressPoint",
+    "Round",
+    "Standing",
+    "Tournament",
+    "TournamentCard",
+    "Viewer",
+]

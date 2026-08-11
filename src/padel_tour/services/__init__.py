@@ -66,7 +66,6 @@ from .invites import (
 from .permissions import (
     ANONYMOUS,
     Anonymous,
-    Viewing,
     can_organise,
     can_see,
     is_admin,
@@ -95,11 +94,15 @@ from .tournaments import (
 from .views import (
     GroupView,
     MatchView,
+    PlayerProgress,
     PlayerView,
+    ProgressPointView,
     RoundView,
     StandingView,
     TournamentSummary,
     TournamentView,
+    View,
+    Viewing,
 )
 
 __all__ = [
@@ -124,7 +127,9 @@ __all__ = [
     "PlayerAlreadyClaimedError",
     "PlayerNotFoundError",
     "PlayerNotInGroupError",
+    "PlayerProgress",
     "PlayerView",
+    "ProgressPointView",
     "RoundView",
     "ServiceError",
     "StandingView",
@@ -133,6 +138,7 @@ __all__ = [
     "TournamentNotFoundError",
     "TournamentSummary",
     "TournamentView",
+    "View",
     "Viewing",
     "account_for_identity",
     "account_for_launch",

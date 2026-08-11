@@ -46,6 +46,8 @@ from .permissions import (
 )
 from .views import (
     MatchView,
+    PlayerProgress,
+    ProgressPointView,
     RoundView,
     StandingView,
     TournamentSummary,
@@ -112,6 +114,21 @@ def _to_view(row: Tournament, state: TournamentState) -> TournamentView:
         for line in standings(state)
     )
 
+    # Joined to the standings here and nowhere else. The engine answers by player id, and
+    # every consumer wants the same thing from it: named lines, best first.
+    series = progression(state)
+    chart = tuple(
+        PlayerProgress(
+            player_id=line.player_id,
+            name=line.name,
+            points=tuple(
+                ProgressPointView.model_validate(point)
+                for point in series.get(str(line.player_id), ())
+            ),
+        )
+        for line in table
+    )
+
     return TournamentView(
         id=row.id,
         group_id=row.group_id,
@@ -125,7 +142,7 @@ def _to_view(row: Tournament, state: TournamentState) -> TournamentView:
         organiser_account_id=row.organiser_account_id,
         rounds=rounds,
         standings=table,
-        progression={to_uuid(player): points for player, points in progression(state).items()},
+        progression=chart,
         state=state,
     )
 

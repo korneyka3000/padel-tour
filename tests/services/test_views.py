@@ -1,9 +1,14 @@
-"""One schema for a group, and the field inside it that must never reach a client.
+"""One schema per thing, and the fields inside them that must never reach a client.
 
-``owner_account_id`` is an account id. No client has any use for it, and knowing which
-account owns a group is not something membership should buy. It lives on the model anyway,
-because the alternative — a second near-identical class whose only job is to drop one field
-— is a duplicate with a standing invitation to drift.
+The views *are* the wire format — there is no second set of models in ``api/schemas`` any
+more, and no mappers copying one into the other. What used to be "leave that field out of
+the response model" is now ``Field(exclude=True)`` on the view itself.
+
+That trade is worth stating, because it moves where the mistakes can happen. Before, a field
+added to a view and forgotten on the wire model simply never shipped: invisible, and usually
+harmless. Now a field added to a view ships by default, and forgetting to exclude a *secret*
+is a leak. The upside is that the two can no longer disagree about anything else; the price
+is that this file has to be thorough.
 
 ``exclude`` is a *serialisation* setting, so the guarantee is exactly as strong as the tests
 below and no stronger. That is why they check the ways a value actually leaves this process,
@@ -13,8 +18,10 @@ rather than checking the field's configuration.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
-from padel_tour.services import GroupView
+from padel_tour.engine import Format, PairingPattern, TournamentConfig, create_americano
+from padel_tour.services import GroupView, TournamentSummary, TournamentView, Viewing
 
 OWNER = uuid.uuid4()
 
@@ -58,3 +65,126 @@ def test_the_owner_is_absent_from_the_schema_clients_read() -> None:
 def test_everything_a_client_needs_is_still_there() -> None:
     """The counterpart: excluding one field must not quietly exclude the rest."""
     assert set(group().model_dump()) == {"id", "name", "player_count"}
+
+
+# ------------------------------------------------------------------- the whole tournament
+#
+# A tournament view carries two things a client must not have: the account id of whoever
+# organises it, and the engine's own state object. The second is not a secret so much as an
+# object with no business being JSON at all — it is the full draw, the seed and every result,
+# reachable from a page anyone with the link can open.
+
+
+def tournament(**over: object) -> TournamentView:
+    """A one-round, four-player tournament — the smallest thing the engine will build."""
+    state = create_americano(
+        [str(uuid.uuid4()) for _ in range(4)], TournamentConfig(format=Format.AMERICANO), seed=1
+    )
+    fields: dict[str, object] = {
+        "id": uuid.uuid4(),
+        "group_id": uuid.uuid4(),
+        "format": Format.AMERICANO,
+        "points_per_match": 24,
+        "pairing_pattern": PairingPattern.CROSSOVER,
+        "total_rounds": 3,
+        "finished": False,
+        "created_at": datetime(2026, 8, 11, tzinfo=UTC),
+        "finished_at": None,
+        "organiser_account_id": OWNER,
+        "rounds": (),
+        "standings": (),
+        "progression": (),
+        "state": state,
+    }
+    return TournamentView.model_validate(fields | over)
+
+
+def test_the_organiser_is_readable_in_process() -> None:
+    """The permission check reads it on every scoring attempt."""
+    assert tournament().organiser_account_id == OWNER
+
+
+def test_neither_internal_field_survives_json() -> None:
+    published = tournament().model_dump_json()
+
+    assert "organiser_account_id" not in published
+    assert str(OWNER) not in published
+    assert "state" not in published
+    assert "seed" not in published
+
+
+def test_the_schema_clients_read_names_neither() -> None:
+    published = TournamentView.model_json_schema(mode="serialization")["properties"]
+
+    assert "organiser_account_id" not in published
+    assert "state" not in published
+
+
+def test_the_engine_state_is_not_copied() -> None:
+    """``InstanceOf``, not a nested model.
+
+    Pydantic will happily validate a dataclass by rebuilding it, field by field, all the way
+    down — here that is every round, every match and every result, on a request that only
+    wanted to read the standings. This pins the cheap path: the same object goes in and out.
+    """
+    state = create_americano(
+        [str(uuid.uuid4()) for _ in range(4)], TournamentConfig(format=Format.AMERICANO), seed=1
+    )
+
+    assert tournament(state=state).state is state
+
+
+def test_a_viewer_is_a_copy_not_a_mutation() -> None:
+    """Who is asking belongs to the request, not to the tournament.
+
+    Two people reading the same tournament at once must not be able to see each other's
+    permissions, which is exactly what setting the field in place would allow.
+    """
+    view = tournament()
+
+    mine = view.seen_by(Viewing(is_member=True, is_organiser=True))
+
+    assert mine.viewer.is_organiser is True
+    assert view.viewer.is_organiser is False
+
+
+def test_a_stranger_is_the_default() -> None:
+    """A link-holder gets a page with no controls, without anyone having to say so."""
+    assert tournament().viewer == Viewing()
+
+
+# --------------------------------------------------------------------------- the archive
+
+
+def test_an_archive_line_keeps_its_extras_off_the_wire() -> None:
+    """``placings`` and ``group_id`` are for the bot and the router, not for the response.
+
+    Not secrets — the bot shows every placing to the group it belongs to. They are excluded
+    because the web's archive has no room for them yet, and shipping a field no client reads
+    is how a response grows to twice the size nobody asked for.
+    """
+    summary = TournamentSummary(
+        id=uuid.uuid4(),
+        group_id=uuid.uuid4(),
+        format=Format.AMERICANO,
+        finished=True,
+        player_count=4,
+        rounds_played=3,
+        total_rounds=3,
+        created_at=datetime(2026, 8, 11, tzinfo=UTC),
+        finished_at=datetime(2026, 8, 11, tzinfo=UTC),
+        winner_name="Аня",
+        placings=("Аня", "Боря", "Вика", "Гриша"),
+    )
+
+    assert summary.placings[0] == "Аня"
+    assert set(summary.model_dump()) == {
+        "id",
+        "format",
+        "finished",
+        "player_count",
+        "rounds_played",
+        "total_rounds",
+        "created_at",
+        "winner_name",
+    }

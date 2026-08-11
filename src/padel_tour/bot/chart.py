@@ -43,12 +43,12 @@ def render(view: TournamentView) -> bytes | None:
     Answering ``None`` rather than an empty chart is deliberate: a picture of nothing is
     worse than the round screen, which at least says who is about to play whom.
     """
-    series = view.progression
-    played = [point.round_no for point in next(iter(series.values()), ())]
+    # Ordered by standing and already named, so the legend matches the table for free.
+    lines = view.progression
+    played = [point.round_no for point in lines[0].points] if lines else []
     if not played:
         return None
 
-    lines = [(row.name, series[row.player_id]) for row in view.standings]
     height = TOP + ROW * max(len(lines) - 1, 1) + BOTTOM
 
     image = Image.new("RGB", (WIDTH, height), NIGHT)
@@ -66,9 +66,9 @@ def render(view: TournamentView) -> bytes | None:
     _draw_grid(draw, played, len(lines), x, y)
 
     # Drawn in reverse so the leader's line ends up on top of everyone else's.
-    for index, (name, points) in reversed(list(enumerate(lines))):
+    for index, line in reversed(list(enumerate(lines))):
         colour = lane(index)
-        path = [(x(point.round_no), y(point.rank)) for point in points]
+        path = [(x(point.round_no), y(point.rank)) for point in line.points]
         if len(path) > 1:
             draw.line(path, fill=colour, width=LINE, joint="curve")
         for spot in path:
@@ -76,7 +76,7 @@ def render(view: TournamentView) -> bytes | None:
         last = path[-1]
         draw.text(
             (last[0] + 18, last[1]),
-            f"{points[-1].rank}. {name}",
+            f"{line.points[-1].rank}. {line.name}",
             font=font(26),
             fill=colour,
             anchor="lm",
