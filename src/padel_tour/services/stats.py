@@ -7,8 +7,10 @@ the fact — nothing needs invalidating because nothing was cached.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import uuid  # noqa: TC003 - Pydantic resolves annotations when the class is built
 from typing import TYPE_CHECKING
+
+from pydantic import Field, computed_field
 
 from padel_tour import repositories
 from padel_tour.db.mapper import load_state, to_player_id
@@ -16,35 +18,41 @@ from padel_tour.engine import standings
 
 from .groups import get_player
 
-# Runtime import: the dataclass annotation below is resolved when the class is built.
-from .views import TournamentSummary  # noqa: TC001
+# Runtime imports: Pydantic resolves the annotations below when the class is built.
+from .views import TournamentSummary, View
 
 if TYPE_CHECKING:
-    import uuid
-
     from sqlalchemy.ext.asyncio import AsyncSession
 
 #: A finish in the top three counts as a podium.
 PODIUM_RANK = 3
 
 
-@dataclass(frozen=True, slots=True)
-class PlayerStats:
-    """One player's record across everything they have played."""
+class PlayerStats(View):
+    """One player's record across everything they have played — and the JSON of it.
 
-    player_id: uuid.UUID
+    Serialised as ``id`` rather than ``player_id`` because that is what the profile endpoint
+    has always answered and a client is reading it. The field keeps the longer name in
+    process, where "which id" is a real question.
+    """
+
+    player_id: uuid.UUID = Field(serialization_alias="id")
     name: str
     tournaments: int
     matches: int
     wins: int
-    draws: int
-    losses: int
     points_for: int
-    points_against: int
     best_rank: int | None
     podiums: int
     history: tuple[TournamentSummary, ...]
 
+    #: Counted, and not yet shown anywhere. Kept off the wire until a screen wants them,
+    #: rather than shipped on the chance that one might.
+    draws: int = Field(default=0, exclude=True)
+    losses: int = Field(default=0, exclude=True)
+    points_against: int = Field(default=0, exclude=True)
+
+    @computed_field(description="Points per match played")
     @property
     def average_points(self) -> float:
         """Points per match — the only fair comparison when people play different amounts."""

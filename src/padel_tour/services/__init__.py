@@ -76,6 +76,7 @@ from .permissions import (
     require_owner,
     viewing,
 )
+from .stats import PlayerStats, player_stats
 from .telegram_auth import account_for_launch
 from .tournaments import (
     active_tournament,
@@ -128,6 +129,7 @@ __all__ = [
     "PlayerNotFoundError",
     "PlayerNotInGroupError",
     "PlayerProgress",
+    "PlayerStats",
     "PlayerView",
     "ProgressPointView",
     "RoundView",
@@ -175,6 +177,7 @@ __all__ = [
     "peek_invite",
     "player_for_account",
     "player_history",
+    "player_stats",
     "record_score",
     "redeem_invite",
     "redeem_magic_link",

@@ -198,19 +198,7 @@ async def read_player(
 ) -> PlayerProfile:
     player = await get_player(session, player_id)
     await require_member(session, actor, player.group_id)
-    stats = await player_stats(session, player_id)
-    return PlayerProfile(
-        id=stats.player_id,
-        name=stats.name,
-        tournaments=stats.tournaments,
-        matches=stats.matches,
-        wins=stats.wins,
-        points_for=stats.points_for,
-        average_points=stats.average_points,
-        best_rank=stats.best_rank,
-        podiums=stats.podiums,
-        history=stats.history,
-    )
+    return await player_stats(session, player_id)
 
 
 __all__ = ["API_PREFIX", "router"]

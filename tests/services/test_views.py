@@ -21,9 +21,16 @@ import uuid
 from datetime import UTC, datetime
 
 from padel_tour.engine import Format, PairingPattern, TournamentConfig, create_americano
-from padel_tour.services import GroupView, TournamentSummary, TournamentView, Viewing
+from padel_tour.services import (
+    GroupView,
+    PlayerStats,
+    TournamentSummary,
+    TournamentView,
+    Viewing,
+)
 
 OWNER = uuid.uuid4()
+PLAYER = uuid.uuid4()
 
 
 def group() -> GroupView:
@@ -188,3 +195,51 @@ def test_an_archive_line_keeps_its_extras_off_the_wire() -> None:
         "created_at",
         "winner_name",
     }
+
+
+# ---------------------------------------------------------------------------- the profile
+
+
+def profile() -> PlayerStats:
+    return PlayerStats(
+        player_id=PLAYER,
+        name="Аня",
+        tournaments=3,
+        matches=21,
+        wins=14,
+        draws=1,
+        losses=6,
+        points_for=280,
+        points_against=224,
+        best_rank=1,
+        podiums=2,
+        history=(),
+    )
+
+
+def test_the_profile_answers_id_not_player_id() -> None:
+    """A rename would break a page that reads it, and the model would still be right.
+
+    The service says ``player_id`` because in process "which id" is a real question; the
+    endpoint has always said ``id``. One ``serialization_alias`` holds both, where there used
+    to be a whole class whose only difference from this one was that word.
+    """
+    published = profile().model_dump(by_alias=True)
+
+    assert published["id"] == PLAYER
+    assert "player_id" not in published
+
+
+def test_counted_but_unshown_numbers_stay_off_the_wire() -> None:
+    """Shipped on the chance a screen might want them is how a response doubles in size."""
+    published = profile().model_dump(by_alias=True)
+
+    assert profile().losses == 6
+    assert {"draws", "losses", "points_against"}.isdisjoint(published)
+
+
+def test_points_per_match_is_computed_and_published() -> None:
+    """A derived number, and the only fair comparison when people play different amounts."""
+    published = profile().model_dump(by_alias=True)
+
+    assert published["average_points"] == 13.3
