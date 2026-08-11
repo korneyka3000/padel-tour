@@ -2,7 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "cd web && npm ci && npm run build",
   "outputDirectory": "web/dist",
-  "_comment_regions": "Next to the database, not next to the users. Reading one tournament takes five queries; with the function in Frankfurt and Neon in Virginia that was five Atlantic crossings per request, ~1.1s measured. Co-located it is one crossing — the user's — and the queries cost a millisecond each. Move this back to fra1 the day the database moves to eu-central-1, and not before.",
   "regions": ["iad1"],
   "framework": null,
   "rewrites": [

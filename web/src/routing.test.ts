@@ -20,9 +20,32 @@ interface Rewrite {
 
 const config = JSON.parse(
   readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8'),
-) as { rewrites: Rewrite[] }
+) as Record<string, unknown> & { rewrites: Rewrite[] }
 
 const catchAll = config.rewrites.find((rule) => rule.destination === '/index.html')
+
+/**
+ * Vercel validates this file against a schema and refuses anything it does not recognise —
+ * including a key added purely to explain a decision, which is how one deploy died. Prose
+ * belongs in docs/INFRASTRUCTURE.md; this keeps the file to properties Vercel accepts.
+ */
+describe('vercel.json', () => {
+  const ALLOWED = new Set([
+    '$schema',
+    'buildCommand',
+    'outputDirectory',
+    'regions',
+    'framework',
+    'rewrites',
+    'git',
+  ])
+
+  it('carries no property Vercel would reject', () => {
+    const unknown = Object.keys(config).filter((key) => !ALLOWED.has(key))
+
+    expect(unknown).toEqual([])
+  })
+})
 
 describe('the SPA rewrite', () => {
   it('is there at all', () => {
