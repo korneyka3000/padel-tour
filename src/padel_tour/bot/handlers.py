@@ -25,6 +25,7 @@ from padel_tour.services import (
     active_tournament,
     add_player,
     advance_round,
+    claim_player,
     create_group,
     ensure_identity,
     extend_tournament,
@@ -35,8 +36,10 @@ from padel_tour.services import (
     link_group,
     list_players,
     list_tournaments,
+    player_for_account,
     record_score,
     redeem_invite,
+    release_player,
     reroll_tournament,
     start_tournament,
 )
@@ -383,7 +386,7 @@ async def _dispatch(
     if press.action is Action.SHOW:
         return await _show(session, press.arg, chat_id, group_id, actor)
 
-    for phase in (_setup_action, _scoring_action, _lifecycle_action):
+    for phase in (_squad_action, _setup_action, _scoring_action, _lifecycle_action):
         outcome = await phase(session, press, chat_id, group_id, actor)
         if outcome is not None:
             return outcome
@@ -401,14 +404,35 @@ async def _setup_action(
     match press.action:
         case Action.TOGGLE:
             return await _toggle(session, press.arg, chat_id, group_id)
-        case Action.DROP:
-            return await _drop(session, press.arg, group_id, actor)
         case Action.SETTING:
             return _setting(press, chat_id)
         case Action.BEGIN:
             return await _begin(session, chat_id, group_id, actor)
         case Action.REROLL:
             return await _reroll(session, group_id, actor)
+    return None
+
+
+async def _squad_action(
+    session: AsyncSession,
+    press: Callback,
+    chat_id: int,
+    group_id: uuid.UUID,
+    actor: Account,
+) -> Outcome | None:
+    """The group's roster: who is in it, and which of them is you.
+
+    Separate from assembling a tournament, which is what the roster is *for* — one is about
+    the group and outlives every tournament, the other is about tonight.
+    """
+    _ = chat_id
+    match press.action:
+        case Action.DROP:
+            return await _drop(session, press.arg, group_id, actor)
+        case Action.CLAIM:
+            return await _claim(session, press.arg, group_id, actor)
+        case Action.RELEASE:
+            return await _release(session, press.arg, group_id, actor)
     return None
 
 
@@ -491,7 +515,7 @@ async def _show_lobby(
             drafts.clear(chat_id)
             return await _home(session, group_id), None, ""
         case Screen.SQUAD:
-            return screens.squad_screen(await list_players(session, group_id)), None, ""
+            return await _squad(session, group_id, actor)
         case Screen.ROSTER:
             return await _who_plays(session, chat_id, group_id)
         case Screen.SETUP:
@@ -618,6 +642,37 @@ async def _who_plays(session: AsyncSession, chat_id: int, group_id: uuid.UUID) -
         draft = drafts.start(chat_id, group_id)
         draft.selected = {player.id for player in roster}
     return screens.roster_screen(roster, draft.selected, draft.allowed_counts()), None, ""
+
+
+async def _squad(session: AsyncSession, group_id: uuid.UUID, actor: Account) -> Outcome:
+    """The roster, and which of these names the person tapping already holds."""
+    roster = await list_players(session, group_id)
+    mine = await player_for_account(session, group_id, actor)
+    return screens.squad_screen(roster, None if mine is None else mine.id), None, ""
+
+
+async def _claim(session: AsyncSession, raw: str, group_id: uuid.UUID, actor: Account) -> Outcome:
+    """ "That one is me."
+
+    The whole reason a personal history can exist: matches are recorded against a player,
+    and until an account holds one there is nothing for "my statistics" to point at.
+    """
+    player_id = parse_player_id(raw)
+    if player_id is None:
+        return _NOTHING
+    player = await claim_player(session, player_id, actor)
+    roster = await list_players(session, group_id)
+    return screens.squad_screen(roster, player.id), None, f"Теперь вы — {player.name}"
+
+
+async def _release(session: AsyncSession, raw: str, group_id: uuid.UUID, actor: Account) -> Outcome:
+    """The way back out of a mistap, which is what lets claiming be one tap."""
+    player_id = parse_player_id(raw)
+    if player_id is None:
+        return _NOTHING
+    player = await release_player(session, player_id, actor)
+    roster = await list_players(session, group_id)
+    return screens.squad_screen(roster, None), None, f"Больше не {player.name}"
 
 
 async def _drop(session: AsyncSession, raw: str, group_id: uuid.UUID, actor: Account) -> Outcome:

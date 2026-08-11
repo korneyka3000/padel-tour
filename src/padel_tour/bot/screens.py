@@ -21,11 +21,13 @@ from padel_tour.settings import mini_app_url
 from .callbacks import (
     Action,
     Screen,
+    claim,
     confirm,
     court,
     drop,
     plain,
     points,
+    release,
     setting,
     show,
     toggle,
@@ -91,25 +93,34 @@ def home(group_name: str, roster: Sequence[PlayerView]) -> Rendered:
     return "\n".join(lines), builder.as_markup()
 
 
-def squad_screen(roster: Sequence[PlayerView]) -> Rendered:
-    """The group's roster, and the two things done to it: add somebody, remove somebody.
+def squad_screen(roster: Sequence[PlayerView], mine: uuid.UUID | None = None) -> Rendered:
+    """The group's roster, and the three things done to it.
 
     Removing hides rather than deletes — the row carries every match that person played —
     and ``/add`` with the same name brings them back, which is why one tap is enough and
     there is no confirmation standing in the way.
+
+    Saying which of these names is you is the other tap, and it is the one that makes a
+    personal history exist at all: matches are recorded against a player, so until an
+    account holds one, "my statistics" has nothing to point at.
     """
     lines = ["<b>Состав группы</b>", ""]
-    if roster:
-        lines.append("Нажмите на игрока, чтобы убрать его из состава.")
-    else:
+    if not roster:
         lines.append("Пока никого.")
+    elif mine is None:
+        lines.append("Отметьте себя — тогда бот запомнит вашу статистику.")
     lines.append("")
     lines.append("Добавить: <code>/add Аня, Боря</code>")
     lines.append("Переименовать: <code>/rename Аня = Анна</code>")
 
     builder = InlineKeyboardBuilder()
     for player in roster:
-        builder.row(InlineKeyboardButton(text=f"✕ {player.name}", callback_data=drop(player.id)))
+        row = [InlineKeyboardButton(text=f"✕ {player.name}", callback_data=drop(player.id))]
+        if player.id == mine:
+            row.append(InlineKeyboardButton(text="это я ✓", callback_data=release(player.id)))
+        elif mine is None:
+            row.append(InlineKeyboardButton(text="это я", callback_data=claim(player.id)))
+        builder.row(*row)
     builder.row(*_nav(("🏠 В начало", show(Screen.HOME))))
     return "\n".join(lines), builder.as_markup()
 

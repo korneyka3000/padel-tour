@@ -23,6 +23,7 @@ from padel_tour.services import (
     create_group,
     link_group,
     list_players,
+    player_for_account,
 )
 
 if TYPE_CHECKING:
@@ -619,3 +620,91 @@ def test_every_command_the_bot_answers_is_in_its_menu() -> None:
     assert answered, "found no command filters — the introspection has drifted"
 
     assert answered <= listed, f"not in the menu: {sorted(answered - listed)}"
+
+
+# --------------------------------------------------------------------------- "это я"
+
+
+async def test_saying_which_player_you_are_makes_a_history_yours(
+    session: AsyncSession, bot: FakeBot
+) -> None:
+    """The link everything personal hangs from.
+
+    Matches are recorded against a player, and the bot only ever knew an account. Until one
+    holds the other, "my statistics" has nothing to point at — which is why eight players
+    with three tournaments each belonged to nobody.
+    """
+    group_id = await seeded_group(session)
+    roster = await list_players(session, group_id)
+    await press(session, bot, show(Screen.SQUAD))
+    assert "это я" in bot.edited[-1].buttons
+
+    await press(session, bot, Callback(Action.CLAIM, roster[0].id.hex).pack())
+
+    actor = await handlers._account_for(session, ORGANISER)
+    mine = await player_for_account(session, group_id, actor)
+    assert mine is not None
+    assert mine.name == roster[0].name
+    assert "это я ✓" in bot.edited[-1].buttons
+
+
+async def test_a_player_somebody_else_holds_cannot_be_taken(
+    session: AsyncSession, bot: FakeBot
+) -> None:
+    """Otherwise the first person to tap owns everybody's history."""
+    group_id = await seeded_group(session)
+    roster = await list_players(session, group_id)
+    await press(session, bot, Callback(Action.CLAIM, roster[0].id.hex).pack(), user_id=ORGANISER)
+
+    refused = await press(
+        session, bot, Callback(Action.CLAIM, roster[0].id.hex).pack(), user_id=BYSTANDER
+    )
+
+    assert refused.answers[-1].alert
+    actor = await handlers._account_for(session, ORGANISER)
+    mine = await player_for_account(session, group_id, actor)
+    assert mine is not None
+    assert mine.name == roster[0].name
+
+
+async def test_nobody_plays_as_two_people_in_one_group(session: AsyncSession, bot: FakeBot) -> None:
+    group_id = await seeded_group(session)
+    roster = await list_players(session, group_id)
+    await press(session, bot, Callback(Action.CLAIM, roster[0].id.hex).pack())
+
+    refused = await press(session, bot, Callback(Action.CLAIM, roster[1].id.hex).pack())
+
+    assert refused.answers[-1].alert
+    actor = await handlers._account_for(session, ORGANISER)
+    mine = await player_for_account(session, group_id, actor)
+    assert mine is not None
+    assert mine.name == roster[0].name
+
+
+async def test_a_mistap_can_be_undone(session: AsyncSession, bot: FakeBot) -> None:
+    """Which is what lets claiming be one tap instead of a confirmation dialogue."""
+    group_id = await seeded_group(session)
+    roster = await list_players(session, group_id)
+    await press(session, bot, Callback(Action.CLAIM, roster[0].id.hex).pack())
+
+    await press(session, bot, Callback(Action.RELEASE, roster[0].id.hex).pack())
+
+    actor = await handlers._account_for(session, ORGANISER)
+    assert await player_for_account(session, group_id, actor) is None
+    assert "это я" in bot.edited[-1].buttons
+
+
+async def test_you_cannot_release_somebody_you_do_not_hold(
+    session: AsyncSession, bot: FakeBot
+) -> None:
+    group_id = await seeded_group(session)
+    roster = await list_players(session, group_id)
+    await press(session, bot, Callback(Action.CLAIM, roster[0].id.hex).pack(), user_id=ORGANISER)
+
+    refused = await press(
+        session, bot, Callback(Action.RELEASE, roster[0].id.hex).pack(), user_id=BYSTANDER
+    )
+
+    assert refused.answers[-1].alert
+    actor = await handlers._account_for(session, ORGANISER)
+    assert await player_for_account(session, group_id, actor) is not None

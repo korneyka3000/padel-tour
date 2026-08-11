@@ -53,9 +53,16 @@ from .groups import (
     link_group,
     list_groups,
     list_players,
+    player_for_account,
     rename_player,
 )
-from .invites import create_invite, peek_invite, redeem_invite
+from .invites import (
+    claim_player,
+    create_invite,
+    peek_invite,
+    redeem_invite,
+    release_player,
+)
 from .permissions import (
     ANONYMOUS,
     Anonymous,
@@ -137,6 +144,7 @@ __all__ = [
     "attach_identity",
     "can_organise",
     "can_see",
+    "claim_player",
     "close_all_sessions",
     "close_session",
     "count_tournaments",
@@ -159,10 +167,12 @@ __all__ = [
     "list_tournaments",
     "open_session",
     "peek_invite",
+    "player_for_account",
     "player_history",
     "record_score",
     "redeem_invite",
     "redeem_magic_link",
+    "release_player",
     "rename_player",
     "request_magic_link",
     "require_can_score",

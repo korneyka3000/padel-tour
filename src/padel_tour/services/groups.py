@@ -197,6 +197,20 @@ async def list_players(
     return [_to_player_view(player) for player in players]
 
 
+async def player_for_account(
+    session: AsyncSession, group_id: uuid.UUID, account: Account
+) -> PlayerView | None:
+    """Which player in this group this account holds, if any.
+
+    The question every personal view starts from: matches are recorded against a player, so
+    "my statistics" is really "the statistics of whichever player is me here".
+    """
+    player = await session.scalar(
+        select(Player).where(Player.group_id == group_id, Player.account_id == account.id)
+    )
+    return None if player is None else _to_player_view(player)
+
+
 async def rename_player(
     session: AsyncSession,
     player_id: uuid.UUID,

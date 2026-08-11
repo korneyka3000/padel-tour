@@ -20,6 +20,7 @@ from padel_tour.db import Invite, Player, utc_now
 
 from .errors import (
     AlreadyPlayingHereError,
+    ForbiddenError,
     InviteNotFoundError,
     InviteUsedError,
     PlayerAlreadyClaimedError,
@@ -86,26 +87,74 @@ async def peek_invite(session: AsyncSession, raw_token: str) -> PlayerView:
 async def redeem_invite(session: AsyncSession, raw_token: str, account: Account) -> PlayerView:
     """Bind an account to the player this invitation names."""
     invite, player = await _load(session, raw_token)
+    bind(player, account, await _other_player_of(session, player, account))
+    invite.used_at = utc_now()
+    await session.flush()
+    return _to_view(player)
 
+
+async def claim_player(session: AsyncSession, player_id: uuid.UUID, account: Account) -> PlayerView:
+    """Say "that one is me", with no invitation in between.
+
+    An invitation exists so that somebody who can be reached out of band vouches for the
+    match between a person and a name. Inside a chat that ceremony has no content: the group
+    is the membership list, everybody in it can see who tapped, and the same people could
+    issue each other invitations anyway — a chat group has no owner, so ``require_owner``
+    lets any of them through.
+
+    What it does keep are the two guards that matter. A player already spoken for cannot be
+    taken, and nobody plays as two people in one group.
+    """
+    player = await session.get(Player, player_id)
+    if player is None:
+        raise PlayerNotFoundError("that player no longer exists")
+    bind(player, account, await _other_player_of(session, player, account))
+    await session.flush()
+    return _to_view(player)
+
+
+async def release_player(
+    session: AsyncSession, player_id: uuid.UUID, account: Account
+) -> PlayerView:
+    """Let go of a player you hold.
+
+    The other half of claiming one by tapping. Without it a mistap is permanent, and a
+    permanent mistake attached to somebody else's history is the reason a confirmation step
+    would otherwise be needed on every claim.
+    """
+    player = await session.get(Player, player_id)
+    if player is None:
+        raise PlayerNotFoundError("that player no longer exists")
+    if player.account_id != account.id:
+        raise ForbiddenError("you are not playing as this player")
+
+    player.account_id = None
+    await session.flush()
+    return _to_view(player)
+
+
+def bind(player: Player, account: Account, other: Player | None) -> None:
+    """Attach an account to a player, or explain why not."""
     if player.account_id is not None:
         raise PlayerAlreadyClaimedError(f"{player.name} is already claimed", name=player.name)
+    if other is not None:
+        raise AlreadyPlayingHereError(
+            f"in this group you already play as {other.name}", name=other.name
+        )
+    player.account_id = account.id
 
-    already = await session.scalar(
+
+async def _other_player_of(
+    session: AsyncSession, player: Player, account: Account
+) -> Player | None:
+    """Whoever this account already is in this group, if anyone."""
+    return await session.scalar(
         select(Player).where(
             Player.group_id == player.group_id,
             Player.account_id == account.id,
             Player.id != player.id,
         )
     )
-    if already is not None:
-        raise AlreadyPlayingHereError(
-            f"in this group you already play as {already.name}", name=already.name
-        )
-
-    player.account_id = account.id
-    invite.used_at = utc_now()
-    await session.flush()
-    return _to_view(player)
 
 
 async def _load(session: AsyncSession, raw_token: str) -> tuple[Invite, Player]:

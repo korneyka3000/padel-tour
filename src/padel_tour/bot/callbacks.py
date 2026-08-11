@@ -45,6 +45,10 @@ class Action(StrEnum):
     TOGGLE = "tog"
     #: Take somebody off the group's roster: ``del:<hex>``
     DROP = "del"
+    #: "That one is me": ``its:<hex>``
+    CLAIM = "its"
+    #: Let go of a player you hold: ``not:<hex>``
+    RELEASE = "not"
     #: Change a setup option: ``set:points:24``
     SETTING = "set"
     #: Redraw the schedule before play starts.
@@ -115,6 +119,14 @@ def toggle(player_id: uuid.UUID) -> str:
 
 def drop(player_id: uuid.UUID) -> str:
     return Callback(Action.DROP, player_id.hex).pack()
+
+
+def claim(player_id: uuid.UUID) -> str:
+    return Callback(Action.CLAIM, player_id.hex).pack()
+
+
+def release(player_id: uuid.UUID) -> str:
+    return Callback(Action.RELEASE, player_id.hex).pack()
 
 
 def setting(name: str, value: str) -> str:
