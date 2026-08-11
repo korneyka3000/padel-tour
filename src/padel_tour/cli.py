@@ -25,7 +25,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from .db import create_all, create_engine, create_session_factory, database_url, is_sqlite
+from .db import create_engine, create_session_factory, database_url
 from .db.session import session_scope
 from .engine import (
     COMMON_POINT_TARGETS,
@@ -254,10 +254,7 @@ async def _open_database() -> tuple[AsyncEngine, async_sessionmaker[AsyncSession
     Creating tables on the fly is fine for SQLite because that file *is* the local dev
     database. Anything else is expected to have had migrations run against it.
     """
-    url = database_url()
-    engine = create_engine(url)
-    if is_sqlite(url):
-        await create_all(engine)
+    engine = create_engine(database_url())
     return engine, create_session_factory(engine)
 
 

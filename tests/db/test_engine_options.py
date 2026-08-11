@@ -13,6 +13,9 @@ did not exist. The deploy caught it; a test that constructed anything would have
 
 from __future__ import annotations
 
+import pytest
+
+from padel_tour.db import MissingDatabaseError, database_url
 from padel_tour.db.session import POOL_RECYCLE_SECONDS, create_engine
 
 POOLED = "postgresql+asyncpg://u:p@ep-crimson-cell-pooler.c-12.us-east-1.aws.neon.tech/neondb"
@@ -56,3 +59,12 @@ def test_connections_are_retired_before_the_far_end_drops_them() -> None:
     engine = create_engine(DIRECT)
 
     assert engine.pool._recycle == POOL_RECYCLE_SECONDS
+
+
+def test_a_missing_database_url_says_what_to_do() -> None:
+    """There used to be a fallback here, and it invented a SQLite file — a different
+    database from the one the code would meet in production, which is how a migration that
+    could not run locally and a suite that passed against nothing reached main (Р-034,
+    Р-041). No fallback now, and the refusal carries the command that fixes it."""
+    with pytest.raises(MissingDatabaseError, match="docker compose"):
+        database_url()

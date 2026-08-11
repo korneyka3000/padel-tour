@@ -1,23 +1,26 @@
 """Where the database lives.
 
-One knob: ``DATABASE_URL``. Unset means a local SQLite file, which is what makes
-``padel-tour play`` work on a fresh checkout with no setup at all.
+One knob and one dialect: ``DATABASE_URL``, pointing at Postgres.
+
+SQLite used to be the default for a fresh checkout, and it cost more than it saved. Two
+dialects meant migrations that could not run locally, constraints SQLite ignored, and a
+suite that passed against a database nobody deployed — see Р-034 and Р-041. ``docker
+compose up`` is the replacement, and it is one command.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from padel_tour.settings import DEFAULT_SQLITE_PATH as _DEFAULT_SQLITE_NAME
 from padel_tour.settings import settings
 
-#: Local database file used when ``DATABASE_URL`` is unset.
-DEFAULT_SQLITE_PATH = Path(_DEFAULT_SQLITE_NAME)
 
+class MissingDatabaseError(RuntimeError):
+    """Nothing said which database to use, and there is nothing sensible to guess."""
+
+
+#: Local database file used when ``DATABASE_URL`` is unset.
 _ASYNC_DRIVERS = {
     "postgresql": "postgresql+asyncpg",
     "postgres": "postgresql+asyncpg",
-    "sqlite": "sqlite+aiosqlite",
 }
 
 #: Query parameters libpq understands but asyncpg does not. Neon hands out connection
@@ -46,12 +49,15 @@ def normalise_url(url: str) -> str:
 
 
 def database_url() -> str:
-    """The async database URL for this process."""
+    """The async database URL for this process.
+
+    Required. There is no fallback to invent one, because every fallback we had invented a
+    *different* database from the one the code would meet in production.
+    """
     configured = settings().database_url.strip()
-    if configured:
-        return normalise_url(configured)
-    return f"sqlite+aiosqlite:///{DEFAULT_SQLITE_PATH}"
-
-
-def is_sqlite(url: str) -> bool:
-    return url.startswith("sqlite")
+    if not configured:
+        raise MissingDatabaseError(
+            "DATABASE_URL is not set. Start one with `docker compose up -d` and point at it: "
+            "postgresql://padel:padel@localhost:55432/padel"
+        )
+    return normalise_url(configured)

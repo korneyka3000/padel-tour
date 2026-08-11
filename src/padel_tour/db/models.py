@@ -260,7 +260,6 @@ class Player(Base):
             "group_id",
             "account_id",
             unique=True,
-            sqlite_where=text("account_id IS NOT NULL"),
             postgresql_where=text("account_id IS NOT NULL"),
         ),
     )

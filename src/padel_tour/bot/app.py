@@ -24,11 +24,9 @@ from aiogram.enums import ParseMode
 from aiogram.types import BotCommand
 
 from padel_tour.db import (
-    create_all,
     create_engine,
     create_session_factory,
     database_url,
-    is_sqlite,
 )
 
 from .config import MissingTokenError, load_config
@@ -65,13 +63,7 @@ def make_bot(token: str) -> Bot:
 
 
 async def _open_database() -> object:
-    url = database_url()
-    engine = create_engine(url)
-    if is_sqlite(url):
-        # The local SQLite file is the development database; anything else has had
-        # migrations run against it.
-        await create_all(engine)
-    return engine
+    return create_engine(database_url())
 
 
 async def _poll() -> None:

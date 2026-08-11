@@ -14,7 +14,6 @@ requires-python = ">=3.14"
 # and tests/test_layering.py checks it directly.
 dependencies = [
     "aiogram>=3.15",
-    "aiosqlite>=0.20",
     "alembic>=1.14",
     "asyncer>=0.0.18",
     "asyncpg>=0.30",

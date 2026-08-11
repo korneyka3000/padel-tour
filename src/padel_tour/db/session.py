@@ -10,7 +10,6 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
-from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -18,7 +17,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from .config import database_url, is_sqlite
+from .config import database_url
 from .models import Base
 
 if TYPE_CHECKING:
@@ -45,18 +44,12 @@ def create_engine(url: str | None = None, *, echo: bool = False) -> AsyncEngine:
     reconnect. ``pool_recycle`` retires connections before the far end does, so the ping
     usually has nothing to fix.
     """
-    resolved = _tuned_for_poolers(url or database_url())
-    engine = create_async_engine(
-        resolved,
+    return create_async_engine(
+        _tuned_for_poolers(url or database_url()),
         echo=echo,
         pool_pre_ping=True,
         pool_recycle=POOL_RECYCLE_SECONDS,
     )
-
-    if is_sqlite(resolved):
-        _enforce_sqlite_foreign_keys(engine)
-
-    return engine
 
 
 #: What turns the asyncpg statement cache off. A URL parameter, not an engine keyword —
@@ -82,20 +75,6 @@ def _tuned_for_poolers(url: str) -> str:
         return url
     separator = "&" if "?" in url else "?"
     return f"{url}{separator}{_NO_STATEMENT_CACHE}"
-
-
-def _enforce_sqlite_foreign_keys(engine: AsyncEngine) -> None:
-    """Turn on foreign keys for SQLite, which ignores them by default.
-
-    Without this, local runs silently accept rows that Postgres rejects in CI — exactly the
-    divergence that having two dialects is supposed to catch.
-    """
-
-    @event.listens_for(engine.sync_engine, "connect")
-    def _set_pragma(dbapi_connection: object, _record: object) -> None:
-        cursor = dbapi_connection.cursor()  # ty: ignore[unresolved-attribute]
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
 
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:

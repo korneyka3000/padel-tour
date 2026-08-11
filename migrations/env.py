@@ -33,8 +33,6 @@ def _configure(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
-        # SQLite cannot ALTER most things in place; batch mode rewrites the table instead.
-        render_as_batch=connection.dialect.name == "sqlite",
         compare_type=True,
     )
 
