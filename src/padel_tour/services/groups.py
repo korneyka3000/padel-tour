@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, or_, select
-
+from padel_tour import repositories
 from padel_tour.db import Group, GroupLink, Player
 
 from .errors import (
@@ -26,17 +25,13 @@ if TYPE_CHECKING:
 
 
 def _to_group_view(group: Group, player_count: int) -> GroupView:
-    return GroupView(
-        id=group.id,
-        name=group.name,
-        owner_account_id=group.owner_account_id,
-        player_count=player_count,
-    )
+    """The row plus the one thing that is not on it."""
+    return GroupView.model_validate(group).model_copy(update={"player_count": player_count})
 
 
 async def get_group(session: AsyncSession, group_id: uuid.UUID) -> Group:
     """Fetch a group row or raise. Internal helper other services build on."""
-    group = await session.get(Group, group_id)
+    group = await repositories.group_by_id(session, group_id)
     if group is None:
         raise GroupNotFoundError(f"no group with id {group_id}")
     return group
@@ -51,30 +46,20 @@ async def create_group(
     correctness — two concurrent creates would otherwise both pass the check.
     """
     clean = name.strip()
-    existing = await session.scalar(select(Group).where(Group.name == clean))
+    existing = await repositories.group_by_name(session, clean)
     if existing is not None:
         raise DuplicateGroupNameError(f"a group called {clean!r} already exists")
 
-    group = Group(name=clean, owner_account_id=owner_account_id)
-    session.add(group)
-    await session.flush()
+    group = await repositories.save(session, Group(name=clean, owner_account_id=owner_account_id))
     return _to_group_view(group, player_count=0)
 
 
 async def list_groups(session: AsyncSession) -> list[GroupView]:
     """Every group, with how many active players each has."""
-    counts = (
-        select(Player.group_id, func.count(Player.id).label("total"))
-        .where(Player.is_active)
-        .group_by(Player.group_id)
-        .subquery()
-    )
-    rows = await session.execute(
-        select(Group, func.coalesce(counts.c.total, 0))
-        .outerjoin(counts, counts.c.group_id == Group.id)
-        .order_by(Group.name)
-    )
-    return [_to_group_view(group, total) for group, total in rows]
+    return [
+        _to_group_view(group, total)
+        for group, total in await repositories.groups_with_counts(session)
+    ]
 
 
 async def groups_for_account(session: AsyncSession, account: Account) -> list[GroupView]:
@@ -90,14 +75,7 @@ async def groups_for_account(session: AsyncSession, account: Account) -> list[Gr
     if await is_admin(session, account):
         return await list_groups(session)
 
-    mine = select(Player.group_id).where(Player.account_id == account.id)
-    ids = set(
-        await session.scalars(
-            select(Group.id).where(
-                or_(Group.owner_account_id == account.id, Group.id.in_(mine)),
-            )
-        )
-    )
+    ids = await repositories.group_ids_for_account(session, account)
     return [group for group in await list_groups(session) if group.id in ids]
 
 
@@ -109,17 +87,10 @@ async def group_for_link(
     Takes a provider rather than naming one, so the service layer stays ignorant of which
     integrations exist.
     """
-    group = await session.scalar(
-        select(Group)
-        .join(GroupLink, GroupLink.group_id == Group.id)
-        .where(GroupLink.provider == provider, GroupLink.external_id == external_id)
-    )
+    group = await repositories.group_by_link(session, provider, external_id)
     if group is None:
         return None
-    total = await session.scalar(
-        select(func.count(Player.id)).where(Player.group_id == group.id, Player.is_active)
-    )
-    return _to_group_view(group, total or 0)
+    return _to_group_view(group, await repositories.active_player_count(session, group.id))
 
 
 async def link_group(
@@ -127,17 +98,15 @@ async def link_group(
 ) -> GroupView:
     """Make a group reachable from an external place."""
     group = await get_group(session, group_id)
-    session.add(GroupLink(group_id=group_id, provider=provider, external_id=external_id))
-    await session.flush()
-    total = await session.scalar(
-        select(func.count(Player.id)).where(Player.group_id == group.id, Player.is_active)
+    await repositories.save(
+        session, GroupLink(group_id=group_id, provider=provider, external_id=external_id)
     )
-    return _to_group_view(group, total or 0)
+    return _to_group_view(group, await repositories.active_player_count(session, group.id))
 
 
 async def get_player(session: AsyncSession, player_id: uuid.UUID) -> Player:
     """Fetch a player row or raise."""
-    player = await session.get(Player, player_id)
+    player = await repositories.player_by_id(session, player_id)
     if player is None:
         raise PlayerNotFoundError(f"no player with id {player_id}")
     return player
@@ -160,9 +129,7 @@ async def add_player(
     await require_owner(session, actor, group_id)
     clean = name.strip()
 
-    existing = await session.scalar(
-        select(Player).where(Player.group_id == group_id, Player.name == clean)
-    )
+    existing = await repositories.player_by_name(session, group_id, clean)
     if existing is not None:
         if existing.is_active:
             raise DuplicatePlayerNameError(f"{clean!r} is already in this group")
@@ -170,9 +137,7 @@ async def add_player(
         await session.flush()
         return PlayerView.model_validate(existing)
 
-    player = Player(group_id=group_id, name=clean)
-    session.add(player)
-    await session.flush()
+    player = await repositories.save(session, Player(group_id=group_id, name=clean))
     return PlayerView.model_validate(player)
 
 
@@ -181,10 +146,9 @@ async def list_players(
 ) -> list[PlayerView]:
     """Players of a group, by name."""
     await get_group(session, group_id)
-    query = select(Player).where(Player.group_id == group_id)
-    if not include_inactive:
-        query = query.where(Player.is_active)
-    players = await session.scalars(query.order_by(Player.name))
+    players = await repositories.players_of_group(
+        session, group_id, include_inactive=include_inactive
+    )
     return [PlayerView.model_validate(player) for player in players]
 
 
@@ -196,9 +160,7 @@ async def player_for_account(
     The question every personal view starts from: matches are recorded against a player, so
     "my statistics" is really "the statistics of whichever player is me here".
     """
-    player = await session.scalar(
-        select(Player).where(Player.group_id == group_id, Player.account_id == account.id)
-    )
+    player = await repositories.player_of_account(session, group_id, account.id)
     return None if player is None else PlayerView.model_validate(player)
 
 
@@ -214,13 +176,7 @@ async def rename_player(
     await require_owner(session, actor, player.group_id)
     clean = name.strip()
 
-    clash = await session.scalar(
-        select(Player).where(
-            Player.group_id == player.group_id,
-            Player.name == clean,
-            Player.id != player.id,
-        )
-    )
+    clash = await repositories.player_by_name(session, player.group_id, clean, other_than=player.id)
     if clash is not None:
         raise DuplicatePlayerNameError(f"{clean!r} is already in this group")
 

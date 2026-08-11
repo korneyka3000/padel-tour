@@ -13,10 +13,8 @@ from __future__ import annotations
 import secrets
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import selectinload
-
-from padel_tour.db import Player, Round, Tournament, TournamentPlayer, TournamentStatus
+from padel_tour import repositories
+from padel_tour.db import Player, Tournament, TournamentPlayer, TournamentStatus
 from padel_tour.db.mapper import build_round_row, load_state, sync_state, to_uuid
 from padel_tour.engine import (
     Format,
@@ -59,25 +57,14 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from sqlalchemy.ext.asyncio import AsyncSession
-    from sqlalchemy.sql.base import ExecutableOption
 
     from padel_tour.db import Account
 
 _SEED_BITS = 32
 
 
-def _loaded() -> tuple[ExecutableOption, ...]:
-    """Eager-load options for a tournament the mapper can rebuild from."""
-    return (
-        selectinload(Tournament.entries).selectinload(TournamentPlayer.player),
-        selectinload(Tournament.rounds).selectinload(Round.matches),
-    )
-
-
 async def _load(session: AsyncSession, tournament_id: uuid.UUID) -> Tournament:
-    row = await session.scalar(
-        select(Tournament).where(Tournament.id == tournament_id).options(*_loaded())
-    )
+    row = await repositories.tournament_by_id(session, tournament_id)
     if row is None:
         raise TournamentNotFoundError(f"no tournament with id {tournament_id}")
     return row
@@ -191,12 +178,7 @@ async def _refreshed_view(session: AsyncSession, row: Tournament) -> TournamentV
     then attempt lazy IO, which an async session cannot do.
     """
     await session.flush()
-    refreshed = await session.scalar(
-        select(Tournament)
-        .where(Tournament.id == row.id)
-        .options(*_loaded())
-        .execution_options(populate_existing=True)
-    )
+    refreshed = await repositories.tournament_by_id(session, row.id, fresh=True)
     if refreshed is None:  # pragma: no cover - it was just flushed
         raise TournamentNotFoundError(f"tournament {row.id} vanished mid-update")
     return _to_view(refreshed, load_state(refreshed))
@@ -206,7 +188,7 @@ async def _validate_roster(
     session: AsyncSession, group_id: uuid.UUID, player_ids: Sequence[uuid.UUID]
 ) -> list[Player]:
     """Every entered player must exist, be active, and belong to this group."""
-    players = list(await session.scalars(select(Player).where(Player.id.in_(player_ids))))
+    players = list(await repositories.players_by_ids(session, player_ids))
     found = {player.id: player for player in players}
 
     missing = [pid for pid in player_ids if pid not in found]
@@ -226,15 +208,7 @@ async def _validate_roster(
 
 async def active_tournament(session: AsyncSession, group_id: uuid.UUID) -> TournamentView | None:
     """The group's tournament in progress, if one is running."""
-    row = await session.scalar(
-        select(Tournament)
-        .where(
-            Tournament.group_id == group_id,
-            Tournament.status == TournamentStatus.ACTIVE,
-        )
-        .order_by(Tournament.created_at.desc())
-        .options(*_loaded())
-    )
+    row = await repositories.active_tournament_row(session, group_id)
     return None if row is None else _to_view(row, load_state(row))
 
 
@@ -283,9 +257,7 @@ async def start_tournament(
     )
     row.entries = _entries_for(state)
     row.rounds = [build_round_row(rnd) for rnd in state.rounds]
-    session.add(row)
-
-    await session.flush()
+    await repositories.save(session, row)
     return await get_tournament(session, row.id)
 
 
@@ -410,36 +382,19 @@ async def list_tournaments(
     Cheap at group scale, and it guarantees the archive agrees with the detail page.
     """
     await get_group(session, group_id)
-    rows = await session.scalars(
-        select(Tournament)
-        .where(Tournament.group_id == group_id)
-        .order_by(Tournament.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-        .options(*_loaded())
-    )
-
+    rows = await repositories.tournaments_of_group(session, group_id, limit=limit, offset=offset)
     return [_to_summary(row) for row in rows]
 
 
 async def player_history(session: AsyncSession, player_id: uuid.UUID) -> list[TournamentSummary]:
     """Every tournament a player took part in, newest first."""
-    rows = await session.scalars(
-        select(Tournament)
-        .join(TournamentPlayer, TournamentPlayer.tournament_id == Tournament.id)
-        .where(TournamentPlayer.player_id == player_id)
-        .order_by(Tournament.created_at.desc())
-        .options(*_loaded())
-    )
+    rows = await repositories.tournaments_of_player(session, player_id)
     return [_to_summary(row) for row in rows]
 
 
 async def count_tournaments(session: AsyncSession, group_id: uuid.UUID) -> int:
     """How many tournaments a group has run. For paging the archive."""
-    total = await session.scalar(
-        select(func.count(Tournament.id)).where(Tournament.group_id == group_id)
-    )
-    return total or 0
+    return await repositories.count_tournaments_of(session, group_id)
 
 
 __all__ = [

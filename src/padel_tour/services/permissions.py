@@ -18,9 +18,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from sqlalchemy import select
-
-from padel_tour.db import PROVIDER_TELEGRAM, Group, Identity, Player, Tournament, TournamentPlayer
+from padel_tour import repositories
+from padel_tour.db import PROVIDER_TELEGRAM
 from padel_tour.settings import settings
 
 from .errors import (
@@ -102,33 +101,25 @@ async def is_admin(session: AsyncSession, actor: Account) -> bool:
     allowed = settings().admins
     if not allowed:
         return False
-    identities = await session.scalars(
-        select(Identity.external_id).where(
-            Identity.account_id == actor.id, Identity.provider == PROVIDER_TELEGRAM
-        )
-    )
+    identities = await repositories.external_ids_of(session, actor.id, PROVIDER_TELEGRAM)
     return any(external in allowed for external in identities)
 
 
 async def is_member(session: AsyncSession, actor: Account, group_id: uuid.UUID) -> bool:
     """Does this account play in this group?"""
-    player = await session.scalar(
-        select(Player.id).where(Player.group_id == group_id, Player.account_id == actor.id)
-    )
+    player = await repositories.player_of_account(session, group_id, actor.id)
     if player is not None:
         return True
     # An owner who has not claimed a player of their own still belongs here.
-    owner = await session.scalar(
-        select(Group.id).where(Group.id == group_id, Group.owner_account_id == actor.id)
-    )
-    return owner is not None
+    group = await repositories.group_by_id(session, group_id)
+    return group is not None and group.owner_account_id == actor.id
 
 
 async def require_member(session: AsyncSession, actor: Actor, group_id: uuid.UUID) -> None:
     if actor is System:
         return
     account = _identified(actor)
-    group = await session.get(Group, group_id)
+    group = await repositories.group_by_id(session, group_id)
     if group is None:
         raise GroupNotFoundError(f"no group with id {group_id}")
     # A group nobody owns — made from the CLI, or before owners existed — is open. Locking
@@ -143,7 +134,7 @@ async def require_owner(session: AsyncSession, actor: Actor, group_id: uuid.UUID
     if actor is System:
         return
     account = _identified(actor)
-    group = await session.get(Group, group_id)
+    group = await repositories.group_by_id(session, group_id)
     if group is None:
         raise GroupNotFoundError(f"no group with id {group_id}")
     # A group made before owners existed, or from the CLI, has none. Leaving it open is
@@ -159,7 +150,7 @@ async def require_organiser(session: AsyncSession, actor: Actor, tournament_id: 
     if actor is System:
         return
     account = _identified(actor)
-    tournament = await session.get(Tournament, tournament_id)
+    tournament = await repositories.tournament_row(session, tournament_id)
     if tournament is None:
         raise TournamentNotFoundError(f"no tournament with id {tournament_id}")
     if tournament.organiser_account_id is None:
@@ -167,7 +158,7 @@ async def require_organiser(session: AsyncSession, actor: Actor, tournament_id: 
     if tournament.organiser_account_id == account.id:
         return
 
-    group = await session.get(Group, tournament.group_id)
+    group = await repositories.group_by_id(session, tournament.group_id)
     if group is not None and group.owner_account_id == account.id:
         return
     if await is_admin(session, account):
@@ -196,7 +187,7 @@ async def require_can_score(
         return
     account = _identified(actor)
 
-    tournament = await session.get(Tournament, tournament_id)
+    tournament = await repositories.tournament_row(session, tournament_id)
     if tournament is None:
         raise TournamentNotFoundError(f"no tournament with id {tournament_id}")
     await require_member(session, account, tournament.group_id)
@@ -216,11 +207,7 @@ async def _plays_as(
     session: AsyncSession, account: Account, tournament_id: uuid.UUID
 ) -> uuid.UUID | None:
     """The player this account holds in this tournament, if they have claimed one."""
-    return await session.scalar(
-        select(Player.id)
-        .join(TournamentPlayer, TournamentPlayer.player_id == Player.id)
-        .where(TournamentPlayer.tournament_id == tournament_id, Player.account_id == account.id)
-    )
+    return await repositories.player_id_in_tournament(session, tournament_id, account.id)
 
 
 # --------------------------------------------------------------------------- asking instead

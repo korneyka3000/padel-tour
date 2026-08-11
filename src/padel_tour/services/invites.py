@@ -14,8 +14,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
-
+from padel_tour import repositories
 from padel_tour.db import Invite, Player, utc_now
 
 from .errors import (
@@ -44,7 +43,7 @@ INVITE_TTL = timedelta(days=7)
 
 async def create_invite(session: AsyncSession, actor: Account | None, player_id: uuid.UUID) -> str:
     """Issue an invitation for one player. Returns the token to hand out."""
-    player = await session.get(Player, player_id)
+    player = await repositories.player_by_id(session, player_id)
     if player is None:
         raise PlayerNotFoundError(f"no player with id {player_id}")
     await require_owner(session, actor, player.group_id)
@@ -53,15 +52,15 @@ async def create_invite(session: AsyncSession, actor: Account | None, player_id:
         raise PlayerAlreadyClaimedError(f"{player.name} is already claimed", name=player.name)
 
     raw, hashed = issue()
-    session.add(
+    await repositories.save(
+        session,
         Invite(
             player_id=player.id,
             created_by_account_id=actor.id if actor is not None else None,
             token_hash=hashed,
             expires_at=utc_now() + INVITE_TTL,
-        )
+        ),
     )
-    await session.flush()
     return raw
 
 
@@ -96,7 +95,7 @@ async def claim_player(session: AsyncSession, player_id: uuid.UUID, account: Acc
     What it does keep are the two guards that matter. A player already spoken for cannot be
     taken, and nobody plays as two people in one group.
     """
-    player = await session.get(Player, player_id)
+    player = await repositories.player_by_id(session, player_id)
     if player is None:
         raise PlayerNotFoundError("that player no longer exists")
     bind(player, account, await _other_player_of(session, player, account))
@@ -113,7 +112,7 @@ async def release_player(
     permanent mistake attached to somebody else's history is the reason a confirmation step
     would otherwise be needed on every claim.
     """
-    player = await session.get(Player, player_id)
+    player = await repositories.player_by_id(session, player_id)
     if player is None:
         raise PlayerNotFoundError("that player no longer exists")
     if player.account_id != account.id:
@@ -139,17 +138,11 @@ async def _other_player_of(
     session: AsyncSession, player: Player, account: Account
 ) -> Player | None:
     """Whoever this account already is in this group, if anyone."""
-    return await session.scalar(
-        select(Player).where(
-            Player.group_id == player.group_id,
-            Player.account_id == account.id,
-            Player.id != player.id,
-        )
-    )
+    return await repositories.other_player_of_account(session, player, account)
 
 
 async def _load(session: AsyncSession, raw_token: str) -> tuple[Invite, Player]:
-    invite = await session.scalar(select(Invite).where(Invite.token_hash == hash_token(raw_token)))
+    invite = await repositories.invite_by_token(session, hash_token(raw_token))
     if invite is None:
         raise InviteNotFoundError("no such invitation")
     if invite.used_at is not None:
@@ -157,7 +150,7 @@ async def _load(session: AsyncSession, raw_token: str) -> tuple[Invite, Player]:
     if invite.expires_at <= utc_now():
         raise InviteNotFoundError("this invitation has expired — ask for a new one")
 
-    player = await session.get(Player, invite.player_id)
+    player = await repositories.player_by_id(session, invite.player_id)
     if player is None:  # pragma: no cover - the foreign key prevents it
         raise PlayerNotFoundError("that player no longer exists")
     return invite, player

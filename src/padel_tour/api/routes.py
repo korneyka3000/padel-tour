@@ -16,10 +16,10 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Response, status
-from sqlalchemy import text
 
 # Aliased: `Tournament` in this module means the wire schema, and the two would
 # otherwise shadow each other with the row losing.
+from padel_tour import repositories
 from padel_tour.db import Account, Base
 from padel_tour.services import (
     active_tournament,
@@ -83,7 +83,7 @@ async def health(session: Session) -> Health:
     can stop.
     """
     try:
-        await session.execute(text("SELECT 1"))
+        await repositories.ping(session)
     except Exception:  # any failure here means the same thing to a caller
         return Health(status="degraded", database="unreachable")
 
@@ -108,15 +108,7 @@ async def _schema_gap(session: Session) -> list[str] | None:
         return []
 
     try:
-        present = {
-            (row.table_name, row.column_name)
-            for row in await session.execute(
-                text(
-                    "SELECT table_name, column_name FROM information_schema.columns "
-                    "WHERE table_schema = current_schema()"
-                )
-            )
-        }
+        present = await repositories.present_columns(session)
     except Exception:
         return None
 

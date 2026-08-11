@@ -87,6 +87,16 @@ class UtcDateTime(TypeDecorator[datetime]):
         return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
+#: Every relationship is declared ``lazy="raise_on_sql"``, and that is a rule rather than a
+#: tuning choice: a query states what it needs or it fails, loudly, where it was written.
+#:
+#: The alternative is not "sometimes a bit slower". It is an N+1 that nobody sees until the
+#: group has twenty players, plus — because these sessions are async — a ``MissingGreenlet``
+#: raised far from whatever forgot to load, on an object whose session has already closed.
+#: ``raise_on_sql`` rather than ``raise``: an attribute that is already loaded, or reachable
+#: without touching the database, still just works.
+
+
 class Base(DeclarativeBase):
     """Declarative base for every table."""
 
@@ -112,7 +122,7 @@ class Account(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
 
     identities: Mapped[list[Identity]] = relationship(
-        back_populates="account", cascade="all, delete-orphan"
+        lazy="raise_on_sql", back_populates="account", cascade="all, delete-orphan"
     )
 
 
@@ -134,7 +144,7 @@ class Identity(Base):
     external_id: Mapped[str] = mapped_column(String(EXTERNAL_ID_LENGTH))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
 
-    account: Mapped[Account] = relationship(back_populates="identities")
+    account: Mapped[Account] = relationship(lazy="raise_on_sql", back_populates="identities")
 
 
 class LoginSession(Base):
@@ -216,7 +226,7 @@ class GroupLink(Base):
     provider: Mapped[str] = mapped_column(String(20))
     external_id: Mapped[str] = mapped_column(String(EXTERNAL_ID_LENGTH))
 
-    group: Mapped[Group] = relationship(back_populates="links")
+    group: Mapped[Group] = relationship(lazy="raise_on_sql", back_populates="links")
 
 
 class Group(Base):
@@ -233,13 +243,13 @@ class Group(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
 
     players: Mapped[list[Player]] = relationship(
-        back_populates="group", cascade="all, delete-orphan"
+        lazy="raise_on_sql", back_populates="group", cascade="all, delete-orphan"
     )
     links: Mapped[list[GroupLink]] = relationship(
-        back_populates="group", cascade="all, delete-orphan"
+        lazy="raise_on_sql", back_populates="group", cascade="all, delete-orphan"
     )
     tournaments: Mapped[list[Tournament]] = relationship(
-        back_populates="group", cascade="all, delete-orphan"
+        lazy="raise_on_sql", back_populates="group", cascade="all, delete-orphan"
     )
 
 
@@ -275,7 +285,7 @@ class Player(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
 
-    group: Mapped[Group] = relationship(back_populates="players")
+    group: Mapped[Group] = relationship(lazy="raise_on_sql", back_populates="players")
 
 
 class Tournament(Base):
@@ -315,13 +325,15 @@ class Tournament(Base):
         ForeignKey("accounts.id", ondelete="SET NULL"), default=None
     )
 
-    group: Mapped[Group] = relationship(back_populates="tournaments")
+    group: Mapped[Group] = relationship(lazy="raise_on_sql", back_populates="tournaments")
     entries: Mapped[list[TournamentPlayer]] = relationship(
+        lazy="raise_on_sql",
         back_populates="tournament",
         cascade="all, delete-orphan",
         order_by="TournamentPlayer.draw_position",
     )
     rounds: Mapped[list[Round]] = relationship(
+        lazy="raise_on_sql",
         back_populates="tournament",
         cascade="all, delete-orphan",
         order_by="Round.number",
@@ -346,8 +358,8 @@ class TournamentPlayer(Base):
     )
     draw_position: Mapped[int] = mapped_column(Integer)
 
-    tournament: Mapped[Tournament] = relationship(back_populates="entries")
-    player: Mapped[Player] = relationship()
+    tournament: Mapped[Tournament] = relationship(lazy="raise_on_sql", back_populates="entries")
+    player: Mapped[Player] = relationship(lazy="raise_on_sql")
 
 
 class Round(Base):
@@ -362,8 +374,9 @@ class Round(Base):
     )
     number: Mapped[int] = mapped_column(Integer)
 
-    tournament: Mapped[Tournament] = relationship(back_populates="rounds")
+    tournament: Mapped[Tournament] = relationship(lazy="raise_on_sql", back_populates="rounds")
     matches: Mapped[list[Match]] = relationship(
+        lazy="raise_on_sql",
         back_populates="round",
         cascade="all, delete-orphan",
         order_by="Match.court",
@@ -404,7 +417,7 @@ class Match(Base):
     score_a: Mapped[int | None] = mapped_column(Integer, default=None)
     score_b: Mapped[int | None] = mapped_column(Integer, default=None)
 
-    round: Mapped[Round] = relationship(back_populates="matches")
+    round: Mapped[Round] = relationship(lazy="raise_on_sql", back_populates="matches")
 
     @property
     def played(self) -> bool:

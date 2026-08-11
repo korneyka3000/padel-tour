@@ -10,9 +10,8 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
-
-from padel_tour.db import PROVIDER_EMAIL, Account, Identity, LoginSession, MagicLink, utc_now
+from padel_tour import repositories
+from padel_tour.db import PROVIDER_EMAIL, Account, LoginSession, MagicLink, utc_now
 
 from .errors import InvalidTokenError, TokenExpiredError, TooManyRequestsError
 from .tokens import hash_token, issue
@@ -38,18 +37,14 @@ SIGN_IN_SUBJECT = "Вход в Padel Tour"
 
 
 async def get_account(session: AsyncSession, account_id: uuid.UUID) -> Account | None:
-    return await session.get(Account, account_id)
+    return await repositories.account_by_id(session, account_id)
 
 
 async def account_for_identity(
     session: AsyncSession, provider: str, external_id: str
 ) -> Account | None:
     """The account behind one external login, if we have seen it before."""
-    return await session.scalar(
-        select(Account)
-        .join(Identity, Identity.account_id == Account.id)
-        .where(Identity.provider == provider, Identity.external_id == external_id)
-    )
+    return await repositories.account_by_identity(session, provider, external_id)
 
 
 async def ensure_identity(
@@ -65,11 +60,8 @@ async def ensure_identity(
     if existing is not None:
         return existing
 
-    account = Account(display_name=display_name)
-    session.add(account)
-    await session.flush()
-    session.add(Identity(account_id=account.id, provider=provider, external_id=external_id))
-    await session.flush()
+    account = await repositories.save(session, Account(display_name=display_name))
+    await repositories.add_identity(session, account, provider, external_id)
     return account
 
 
@@ -77,8 +69,7 @@ async def attach_identity(
     session: AsyncSession, account: Account, provider: str, external_id: str
 ) -> None:
     """Add another way of signing in to an account that already exists."""
-    session.add(Identity(account_id=account.id, provider=provider, external_id=external_id))
-    await session.flush()
+    await repositories.add_identity(session, account, provider, external_id)
 
 
 # ----------------------------------------------------------------- signing in by email
@@ -103,17 +94,16 @@ async def request_magic_link(
     """
     address = email.strip().lower()
 
-    recent = await session.scalar(
-        select(MagicLink)
-        .where(MagicLink.email == address, MagicLink.created_at > utc_now() - MAGIC_LINK_COOLDOWN)
-        .limit(1)
+    recent = await repositories.recent_magic_link(
+        session, address, since=utc_now() - MAGIC_LINK_COOLDOWN
     )
     if recent is not None:
         raise TooManyRequestsError("a link is already on its way — check your inbox")
 
     raw, hashed = issue()
-    session.add(MagicLink(email=address, token_hash=hashed, expires_at=utc_now() + MAGIC_LINK_TTL))
-    await session.flush()
+    await repositories.save(
+        session, MagicLink(email=address, token_hash=hashed, expires_at=utc_now() + MAGIC_LINK_TTL)
+    )
 
     await mailer.send(address, SIGN_IN_SUBJECT, _sign_in_body(f"{link_base}?token={raw}"))
 
@@ -130,23 +120,21 @@ async def issue_sign_in_link(session: AsyncSession, account: Account) -> str:
     a stranger's inbox; this link goes back to the person who asked for it.
     """
     raw, hashed = issue()
-    session.add(
+    await repositories.save(
+        session,
         MagicLink(
             email="",
             account_id=account.id,
             token_hash=hashed,
             expires_at=utc_now() + MAGIC_LINK_TTL,
-        )
+        ),
     )
-    await session.flush()
     return raw
 
 
 async def redeem_magic_link(session: AsyncSession, raw_token: str) -> Account:
     """Turn a link into an account, creating one on first sign-in."""
-    link = await session.scalar(
-        select(MagicLink).where(MagicLink.token_hash == hash_token(raw_token))
-    )
+    link = await repositories.magic_link_by_token(session, hash_token(raw_token))
     if link is None or link.used_at is not None:
         raise InvalidTokenError("this link is not valid — ask for a new one")
     if link.expires_at <= utc_now():
@@ -156,7 +144,7 @@ async def redeem_magic_link(session: AsyncSession, raw_token: str) -> Account:
     await session.flush()
 
     if link.account_id is not None:
-        bound = await session.get(Account, link.account_id)
+        bound = await repositories.account_by_id(session, link.account_id)
         if bound is None:  # pragma: no cover - the foreign key cascades
             raise InvalidTokenError("this link is not valid — ask for a new one")
         return bound
@@ -169,36 +157,30 @@ async def redeem_magic_link(session: AsyncSession, raw_token: str) -> Account:
 async def open_session(session: AsyncSession, account: Account) -> str:
     """Start a signed-in session and return the token for the cookie."""
     raw, hashed = issue()
-    session.add(
-        LoginSession(account_id=account.id, token_hash=hashed, expires_at=utc_now() + SESSION_TTL)
+    await repositories.save(
+        session,
+        LoginSession(account_id=account.id, token_hash=hashed, expires_at=utc_now() + SESSION_TTL),
     )
-    await session.flush()
     return raw
 
 
 async def account_for_session(session: AsyncSession, raw_token: str) -> Account | None:
     """Who is signed in, if anyone. An expired session is nobody."""
-    row = await session.scalar(
-        select(LoginSession).where(LoginSession.token_hash == hash_token(raw_token))
-    )
+    row = await repositories.login_session_by_token(session, hash_token(raw_token))
     if row is None or row.expires_at <= utc_now():
         return None
-    return await session.get(Account, row.account_id)
+    return await repositories.account_by_id(session, row.account_id)
 
 
 async def close_session(session: AsyncSession, raw_token: str) -> None:
     """Sign out. Unknown tokens are not an error — the outcome is the one asked for."""
-    row = await session.scalar(
-        select(LoginSession).where(LoginSession.token_hash == hash_token(raw_token))
-    )
+    row = await repositories.login_session_by_token(session, hash_token(raw_token))
     if row is not None:
-        await session.delete(row)
-        await session.flush()
+        await repositories.revoke(session, row)
 
 
 async def close_all_sessions(session: AsyncSession, account: Account) -> None:
     """Sign out everywhere. The reason sessions are rows rather than signed tokens."""
-    rows = await session.scalars(select(LoginSession).where(LoginSession.account_id == account.id))
+    rows = await repositories.sessions_of(session, account.id)
     for row in rows:
-        await session.delete(row)
-    await session.flush()
+        await repositories.revoke(session, row)

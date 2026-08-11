@@ -15,9 +15,8 @@ from typing import TYPE_CHECKING
 
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import BufferedInputFile, InputMediaPhoto
-from sqlalchemy import select
 
-from padel_tour.db import Tournament
+from padel_tour import repositories
 
 if TYPE_CHECKING:
     import uuid
@@ -39,7 +38,7 @@ async def remember_screen(
     session: AsyncSession, tournament_id: uuid.UUID, chat_id: int, message_id: int
 ) -> None:
     """Record which message belongs to this tournament."""
-    row = await session.get(Tournament, tournament_id)
+    row = await repositories.tournament_row(session, tournament_id)
     if row is not None:
         row.screen_chat_id = chat_id
         row.screen_message_id = message_id
@@ -49,7 +48,7 @@ async def screen_location(
     session: AsyncSession, tournament_id: uuid.UUID
 ) -> tuple[int, int] | None:
     """Where this tournament's live message is, if we have posted one."""
-    row = await session.scalar(select(Tournament).where(Tournament.id == tournament_id))
+    row = await repositories.tournament_row(session, tournament_id)
     if row is None or row.screen_chat_id is None or row.screen_message_id is None:
         return None
     return row.screen_chat_id, row.screen_message_id
@@ -129,7 +128,7 @@ async def show_chart(
     and deleted the moment the chat goes anywhere else.
     """
     caption, markup = rendered
-    row = await session.get(Tournament, tournament_id)
+    row = await repositories.tournament_row(session, tournament_id)
     if row is None:
         return
 
@@ -166,11 +165,7 @@ async def hide_chart(bot: Bot, session: AsyncSession, chat_id: int, group_id: uu
     Failure is ignored on purpose: the only ways deleting fails are that the message is
     already gone or too old, and both mean the job is done.
     """
-    row = await session.scalar(
-        select(Tournament).where(
-            Tournament.group_id == group_id, Tournament.chart_message_id.is_not(None)
-        )
-    )
+    row = await repositories.tournament_showing_chart(session, group_id)
     if row is None or row.chart_message_id is None:
         return
     try:

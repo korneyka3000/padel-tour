@@ -10,9 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
-
-from padel_tour.db import Tournament, TournamentPlayer
+from padel_tour import repositories
 from padel_tour.db.mapper import load_state, to_player_id
 from padel_tour.engine import standings
 
@@ -63,18 +61,12 @@ async def player_stats(session: AsyncSession, player_id: uuid.UUID) -> PlayerSta
     Only tournaments with at least one result count towards a rank: finishing "first" in a
     tournament nobody played is not an achievement.
     """
-    from .tournaments import _loaded, _names, _to_summary  # noqa: PLC0415 - avoids a cycle
+    from .tournaments import _names, _to_summary  # noqa: PLC0415 - avoids a cycle
 
     player = await get_player(session, player_id)
     engine_id = to_player_id(player_id)
 
-    rows = await session.scalars(
-        select(Tournament)
-        .join(TournamentPlayer, TournamentPlayer.tournament_id == Tournament.id)
-        .where(TournamentPlayer.player_id == player_id)
-        .order_by(Tournament.created_at.desc())
-        .options(*_loaded())
-    )
+    rows = await repositories.tournaments_of_player(session, player_id)
 
     history: list[TournamentSummary] = []
     matches = wins = draws = losses = 0
