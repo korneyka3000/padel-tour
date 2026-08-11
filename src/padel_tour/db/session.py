@@ -45,13 +45,12 @@ def create_engine(url: str | None = None, *, echo: bool = False) -> AsyncEngine:
     reconnect. ``pool_recycle`` retires connections before the far end does, so the ping
     usually has nothing to fix.
     """
-    resolved = url or database_url()
+    resolved = _tuned_for_poolers(url or database_url())
     engine = create_async_engine(
         resolved,
         echo=echo,
         pool_pre_ping=True,
         pool_recycle=POOL_RECYCLE_SECONDS,
-        **_asyncpg_options(resolved),
     )
 
     if is_sqlite(resolved):
@@ -60,21 +59,29 @@ def create_engine(url: str | None = None, *, echo: bool = False) -> AsyncEngine:
     return engine
 
 
-def _asyncpg_options(url: str) -> dict[str, object]:
-    """Settings that only make sense against a connection pooler.
+#: What turns the asyncpg statement cache off. A URL parameter, not an engine keyword —
+#: passing it to ``create_async_engine`` raises ``TypeError`` at construction, which is a
+#: deploy that fails rather than an application that misbehaves, but a deploy that fails all
+#: the same.
+_NO_STATEMENT_CACHE = "prepared_statement_cache_size=0"
+
+
+def _tuned_for_poolers(url: str) -> str:
+    """Turn off the statement cache when the far end is a connection pooler.
 
     Neon's pooled endpoint is pgbouncer in transaction mode, where a prepared statement
     outlives the transaction that made it but not the backend it was made on — so a cached
     one eventually points at nothing and comes back as ``DuplicatePreparedStatementError``,
     intermittently and under load. SQLAlchemy's own advice for pgbouncer is to keep no
-    cache, and that is what this does.
+    cache.
 
     Only for the pooled host. Against a direct connection — every test, and local
     development — prepared statements are free performance and stay switched on.
     """
-    if "-pooler." not in url:
-        return {}
-    return {"prepared_statement_cache_size": 0}
+    if "-pooler." not in url or _NO_STATEMENT_CACHE.split("=", maxsplit=1)[0] in url:
+        return url
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}{_NO_STATEMENT_CACHE}"
 
 
 def _enforce_sqlite_foreign_keys(engine: AsyncEngine) -> None:
