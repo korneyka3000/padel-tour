@@ -26,7 +26,7 @@ router = APIRouter(prefix=API_PREFIX, tags=["roster"])
 @router.post("/groups", status_code=status.HTTP_201_CREATED)
 async def make_group(body: NewGroup, session: Session, actor: RequiredAccount) -> Group:
     """Start a group. You own it."""
-    return Group.of(await create_group(session, body.name, owner_account_id=actor.id))
+    return await create_group(session, body.name, owner_account_id=actor.id)
 
 
 @router.patch("/players/{player_id}")
@@ -34,7 +34,7 @@ async def rename(
     player_id: uuid.UUID, body: RenamedPlayer, session: Session, actor: RequiredAccount
 ) -> Player:
     """Fix a name. Owners only."""
-    return Player.of(await rename_player(session, player_id, body.name, actor=actor))
+    return await rename_player(session, player_id, body.name, actor=actor)
 
 
 @router.delete("/players/{player_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -63,7 +63,7 @@ async def make_player(
     return GroupDetail(
         id=group.id,
         name=group.name,
-        players=[Player.of(player) for player in roster],
+        players=list(roster),
         is_owner=True,
     )
 

@@ -12,24 +12,17 @@ from padel_tour.services import GroupView, PlayerView
 MAX_NAME = 80
 
 
-class Group(BaseModel):
-    id: uuid.UUID
-    name: str
-    player_count: int
-
-    @classmethod
-    def of(cls, view: GroupView) -> Group:
-        return cls(id=view.id, name=view.name, player_count=view.player_count)
+#: The service layer's model, used as it is — see :class:`~padel_tour.services.GroupView`.
+#: The one field a client must not see is excluded there rather than dropped by a copy here.
+Group = GroupView
 
 
-class Player(BaseModel):
-    id: uuid.UUID
-    name: str
-    is_active: bool
-
-    @classmethod
-    def of(cls, view: PlayerView) -> Player:
-        return cls(id=view.id, name=view.name, is_active=view.is_active)
+#: The service layer's model, used as it is.
+#:
+#: It was copied field for field into a second class that differed only by leaving out
+#: ``group_id`` — which is no secret: it is in the URL of most requests that return a
+#: player. A duplicate that hides nothing only gets a chance to disagree.
+Player = PlayerView
 
 
 class GroupDetail(BaseModel):

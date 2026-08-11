@@ -28,7 +28,7 @@ async def issue_invite(
 ) -> Invitation:
     """Invite somebody to be this player. Owners only."""
     token = await create_invite(session, actor, player_id)
-    return Invitation(token=token, player=Player.of(await peek_invite(session, token)))
+    return Invitation(token=token, player=(await peek_invite(session, token)))
 
 
 @router.get("/invites/{token}")
@@ -38,13 +38,13 @@ async def read_invite(token: str, session: Session) -> Player:
     Open on purpose: the page has to be able to say "join as Аня" before it asks anyone to
     sign in. Knowing the token is already the whole of the secret.
     """
-    return Player.of(await peek_invite(session, token))
+    return await peek_invite(session, token)
 
 
 @router.post("/invites/redeem")
 async def accept_invite(body: RedeemRequest, session: Session, actor: RequiredAccount) -> Player:
     """Accept an invitation as the signed-in account."""
-    return Player.of(await redeem_invite(session, body.token, actor))
+    return await redeem_invite(session, body.token, actor)
 
 
 __all__ = ["router"]

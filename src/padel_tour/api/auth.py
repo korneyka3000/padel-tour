@@ -28,7 +28,7 @@ from padel_tour.services.mail import Mailer, mailer_from_env
 from padel_tour.settings import base_url, settings
 
 from .deps import API_PREFIX, SESSION_COOKIE, RequiredAccount, Session
-from .schemas import Accepted, EnterRequest, Group, LaunchRequest, MagicLinkRequest, Me
+from .schemas import Accepted, EnterRequest, LaunchRequest, MagicLinkRequest, Me
 
 router = APIRouter(prefix=f"{API_PREFIX}/auth", tags=["auth"])
 
@@ -144,7 +144,7 @@ async def _me(session: Session, account: Account) -> Me:
     return Me(
         id=str(account.id),
         display_name=account.display_name,
-        groups=[Group.of(view) for view in await groups_for_account(session, account)],
+        groups=await groups_for_account(session, account),
     )
 
 

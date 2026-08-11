@@ -39,7 +39,6 @@ from .schemas import (
     Group,
     GroupDetail,
     Health,
-    Player,
     PlayerProfile,
     Tournament,
     TournamentCard,
@@ -137,7 +136,7 @@ async def read_groups(session: Session, actor: CurrentAccount) -> list[Group]:
     """The groups you belong to. Signed out, that is none of them."""
     if isinstance(actor, Anonymous):
         return []
-    return [Group.of(view) for view in await groups_for_account(session, actor)]
+    return await groups_for_account(session, actor)
 
 
 @router.get("/groups/{group_id}")
@@ -148,7 +147,7 @@ async def read_group(group_id: uuid.UUID, session: Session, actor: CurrentAccoun
     return GroupDetail(
         id=group.id,
         name=group.name,
-        players=[Player.of(player) for player in roster],
+        players=list(roster),
         is_owner=owns(group.owner_account_id, actor),
     )
 

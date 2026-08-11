@@ -335,3 +335,20 @@ async def test_health_keeps_looking_while_the_schema_is_behind(
         await connection.execute(text("ALTER TABLE tournaments ADD COLUMN chart_message_id BIGINT"))
 
     assert (await client.get("/api/health")).json()["status"] == "ok"
+
+
+async def test_the_owner_account_never_reaches_a_client(
+    client: AsyncClient, mailer: InMemoryMailer
+) -> None:
+    """One model serves the service layer and the wire, so the field it must not publish is
+    excluded rather than dropped by a copy. This is the check that the exclusion holds where
+    it counts: in the document clients read, and in an actual response body."""
+    document = (await client.get("/api/openapi.json")).json()
+    published = document["components"]["schemas"]["GroupView"]["properties"]
+    assert "owner_account_id" not in published
+
+    await sign_in(client, mailer)
+    made = await client.post("/api/groups", json={"name": "Вторничный падел"})
+
+    assert made.status_code == 201
+    assert "owner_account_id" not in made.json()

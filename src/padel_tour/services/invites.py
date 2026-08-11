@@ -42,15 +42,6 @@ if TYPE_CHECKING:
 INVITE_TTL = timedelta(days=7)
 
 
-def _to_view(player: Player) -> PlayerView:
-    return PlayerView(
-        id=player.id,
-        group_id=player.group_id,
-        name=player.name,
-        is_active=player.is_active,
-    )
-
-
 async def create_invite(session: AsyncSession, actor: Account | None, player_id: uuid.UUID) -> str:
     """Issue an invitation for one player. Returns the token to hand out."""
     player = await session.get(Player, player_id)
@@ -81,7 +72,7 @@ async def peek_invite(session: AsyncSession, raw_token: str) -> PlayerView:
     """
     invite, player = await _load(session, raw_token)
     _ = invite
-    return _to_view(player)
+    return PlayerView.model_validate(player)
 
 
 async def redeem_invite(session: AsyncSession, raw_token: str, account: Account) -> PlayerView:
@@ -90,7 +81,7 @@ async def redeem_invite(session: AsyncSession, raw_token: str, account: Account)
     bind(player, account, await _other_player_of(session, player, account))
     invite.used_at = utc_now()
     await session.flush()
-    return _to_view(player)
+    return PlayerView.model_validate(player)
 
 
 async def claim_player(session: AsyncSession, player_id: uuid.UUID, account: Account) -> PlayerView:
@@ -110,7 +101,7 @@ async def claim_player(session: AsyncSession, player_id: uuid.UUID, account: Acc
         raise PlayerNotFoundError("that player no longer exists")
     bind(player, account, await _other_player_of(session, player, account))
     await session.flush()
-    return _to_view(player)
+    return PlayerView.model_validate(player)
 
 
 async def release_player(
@@ -130,7 +121,7 @@ async def release_player(
 
     player.account_id = None
     await session.flush()
-    return _to_view(player)
+    return PlayerView.model_validate(player)
 
 
 def bind(player: Player, account: Account, other: Player | None) -> None:

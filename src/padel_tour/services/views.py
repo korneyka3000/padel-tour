@@ -7,13 +7,17 @@ web would drift apart in small ways — a different tie-break here, a stale name
 
 from __future__ import annotations
 
+# ruff would move these into a type-checking block, and they cannot go there: Pydantic
+# resolves annotations when the class is built, and a name it cannot see turns into
+# "PlayerView is not fully defined" at the first call rather than at import.
+import uuid  # noqa: TC003
 from dataclasses import dataclass
+from datetime import datetime  # noqa: TC003
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import uuid
-    from datetime import datetime
+from pydantic import BaseModel, ConfigDict, Field
 
+if TYPE_CHECKING:
     from padel_tour.engine import (
         Format,
         PairingPattern,
@@ -22,17 +26,45 @@ if TYPE_CHECKING:
     )
 
 
-@dataclass(frozen=True, slots=True)
-class GroupView:
+class GroupView(BaseModel):
+    """A group, as everything above the database sees it.
+
+    One schema, including on the wire. ``owner_account_id`` is internal — it is an account
+    id, and no client has any use for it — so it is carried but never serialised. The
+    alternative was a second near-identical class whose only job was to leave one field out,
+    which is a duplicate with a standing invitation to drift.
+
+    ``exclude`` is a serialisation setting, so the guarantee is only as good as nobody
+    dumping this another way. That is what the test in ``tests/services/test_views.py``
+    is for.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     name: str
     #: Who runs the roster and hands out invitations. Unset for groups made from the CLI.
-    owner_account_id: uuid.UUID | None
-    player_count: int
+    owner_account_id: uuid.UUID | None = Field(default=None, exclude=True)
+    #: Not on the row — counted alongside it.
+    player_count: int = 0
 
 
-@dataclass(frozen=True, slots=True)
-class PlayerView:
+class PlayerView(BaseModel):
+    """A player, which is a row and nothing more.
+
+    Pydantic rather than a dataclass, and read off the ORM object rather than assembled
+    field by field. Two hand-written mappers used to build this — one in ``groups``, one in
+    ``invites`` — for four fields that mirror the table exactly; the only thing they could
+    ever do was disagree.
+
+    ``model_validate`` still **copies**. It is not the same as handing an adapter the ORM
+    row: touching an attribute nobody loaded, on an instance whose session has closed, is a
+    ``MissingGreenlet`` far from where it was caused — and the bot and the CLI call these
+    functions directly, with no HTTP layer to keep a session open around them.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     group_id: uuid.UUID
     name: str

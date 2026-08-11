@@ -34,15 +34,6 @@ def _to_group_view(group: Group, player_count: int) -> GroupView:
     )
 
 
-def _to_player_view(player: Player) -> PlayerView:
-    return PlayerView(
-        id=player.id,
-        group_id=player.group_id,
-        name=player.name,
-        is_active=player.is_active,
-    )
-
-
 async def get_group(session: AsyncSession, group_id: uuid.UUID) -> Group:
     """Fetch a group row or raise. Internal helper other services build on."""
     group = await session.get(Group, group_id)
@@ -177,12 +168,12 @@ async def add_player(
             raise DuplicatePlayerNameError(f"{clean!r} is already in this group")
         existing.is_active = True
         await session.flush()
-        return _to_player_view(existing)
+        return PlayerView.model_validate(existing)
 
     player = Player(group_id=group_id, name=clean)
     session.add(player)
     await session.flush()
-    return _to_player_view(player)
+    return PlayerView.model_validate(player)
 
 
 async def list_players(
@@ -194,7 +185,7 @@ async def list_players(
     if not include_inactive:
         query = query.where(Player.is_active)
     players = await session.scalars(query.order_by(Player.name))
-    return [_to_player_view(player) for player in players]
+    return [PlayerView.model_validate(player) for player in players]
 
 
 async def player_for_account(
@@ -208,7 +199,7 @@ async def player_for_account(
     player = await session.scalar(
         select(Player).where(Player.group_id == group_id, Player.account_id == account.id)
     )
-    return None if player is None else _to_player_view(player)
+    return None if player is None else PlayerView.model_validate(player)
 
 
 async def rename_player(
@@ -235,7 +226,7 @@ async def rename_player(
 
     player.name = clean
     await session.flush()
-    return _to_player_view(player)
+    return PlayerView.model_validate(player)
 
 
 async def deactivate_player(
@@ -246,4 +237,4 @@ async def deactivate_player(
     await require_owner(session, actor, player.group_id)
     player.is_active = False
     await session.flush()
-    return _to_player_view(player)
+    return PlayerView.model_validate(player)
