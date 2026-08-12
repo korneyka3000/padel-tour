@@ -224,22 +224,23 @@ a {
   border-color: color-mix(in oklab, var(--sign) 50%, transparent);
 }
 
+/*
+ * Names above, score below — not side by side, which is where this started.
+ *
+ * The score used to sit in the same row as the names, and measuring it explained the
+ * complaints: on a half 153px wide, two digits plus padding and a gap left the names 64px.
+ * "Кирилл" needs exactly 64 and survived by a pixel; "Александра" needs 100 and did not.
+ * Shaving the gap would have bought a character. Moving the score out buys the whole half,
+ * which is roughly double, and longer names than anyone has fit.
+ */
 .side {
   position: relative;
   z-index: 3;
-  display: flex;
-  align-items: stretch;
-  gap: 0.6rem;
-  padding: 1.5rem clamp(0.7rem, 3.5vw, 1.1rem) 0.6rem;
-}
-
-.side-start {
-  justify-content: flex-start;
-}
-
-.side-end {
-  justify-content: flex-end;
-  flex-direction: row-reverse;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 0.3rem;
+  padding: 1.6rem clamp(0.4rem, 2vw, 0.8rem) 0.7rem;
+  min-width: 0;
 }
 
 /* One player per service box, so the centre line separates them instead of striking
@@ -248,12 +249,9 @@ a {
   display: grid;
   grid-template-rows: 1fr 1fr;
   align-items: center;
+  justify-items: center;
+  text-align: center;
   min-width: 0;
-  flex: 1;
-}
-
-.side-end .side-players {
-  text-align: right;
 }
 
 .player {
@@ -267,7 +265,7 @@ a {
 
 /* Each pair's score sits on its own half, so there is nothing to work out. */
 .side-score {
-  align-self: center;
+  justify-self: center;
   font-family: var(--display);
   font-weight: 800;
   font-size: clamp(1.5rem, 7vw, 2.1rem);

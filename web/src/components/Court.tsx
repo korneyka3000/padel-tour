@@ -62,18 +62,11 @@ function Markings() {
   )
 }
 
-function Side({
-  players,
-  score,
-  align,
-}: {
-  players: [string, string]
-  score: number | null
-  align: 'start' | 'end'
-}) {
+function Side({ players, score }: { players: [string, string]; score: number | null }) {
   return (
-    <div className={`side side-${align}`}>
-      {score !== null && <span className="side-score">{score}</span>}
+    <div className="side">
+      {/* Names first: they take the row that stretches, the score takes the one that does
+          not. Swapping these puts the score on top and squeezes the names again. */}
       <span className="side-players">
         {players.map((name) => (
           <span className="player" key={name}>
@@ -81,6 +74,7 @@ function Side({
           </span>
         ))}
       </span>
+      {score !== null && <span className="side-score">{score}</span>}
     </div>
   )
 }
@@ -195,8 +189,8 @@ function CourtBox({
         <Markings />
         <span className="court-tag">{t('court.number', { court: match.court })}</span>
         {!played && <span className="court-live">{t('court.live')}</span>}
-        <Side players={match.team_a} score={match.score_a} align="start" />
-        <Side players={match.team_b} score={match.score_b} align="end" />
+        <Side players={match.team_a} score={match.score_a} />
+        <Side players={match.team_b} score={match.score_b} />
       </figure>
       {scoring && mine && (
         <ScoreEntry
