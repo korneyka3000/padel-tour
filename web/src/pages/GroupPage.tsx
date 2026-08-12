@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router'
 import { Failed, Loading, Note, useAsync } from '../components/Async'
 import { Climb } from '../components/Climb'
 import { CourtGrid } from '../components/Court'
+import { TournamentList } from '../components/Archive'
 import { Roster } from '../components/Roster'
 import { Standings } from '../components/Standings'
 import type { GroupDetail, Player, Tournament, TournamentCard } from '../lib/api'
@@ -97,30 +98,7 @@ export function GroupPage() {
             {group.is_owner ? t('group.assembleFirst') : t('group.someoneWill')}
           </Note>
         ) : (
-          <div className="cards">
-            {past.map((entry) => (
-              <Link className="card" key={entry.id} to={`/t/${entry.id}`}>
-                <span>
-                  <span className="card-title">{t(`format.${entry.format}`)}</span>
-                  <span className="card-meta">
-                    {t.date(entry.created_at)} · {t.count('players', entry.player_count)}
-                    {entry.finished
-                      ? ''
-                      : ` · ${t('group.playedOf', {
-                          played: entry.rounds_played,
-                          total: entry.total_rounds,
-                        })}`}
-                  </span>
-                </span>
-                {entry.winner_name && (
-                  <span className="card-winner">
-                    {t('group.winner')}
-                    <b>{entry.winner_name}</b>
-                  </span>
-                )}
-              </Link>
-            ))}
-          </div>
+          <TournamentList entries={past} />
         )}
       </section>
 

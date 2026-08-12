@@ -40,6 +40,7 @@ from .groups import (
     group_by_link,
     group_by_name,
     group_ids_for_account,
+    group_names,
     groups_with_counts,
     player_by_id,
     player_by_name,
@@ -57,6 +58,7 @@ from .tournaments import (
     tournament_by_id,
     tournament_row,
     tournament_showing_chart,
+    tournaments_of_account,
     tournaments_of_group,
     tournaments_of_player,
 )
@@ -73,6 +75,7 @@ __all__ = [
     "group_by_link",
     "group_by_name",
     "group_ids_for_account",
+    "group_names",
     "groups_with_counts",
     "invite_by_token",
     "loaded",
@@ -95,6 +98,7 @@ __all__ = [
     "tournament_by_id",
     "tournament_row",
     "tournament_showing_chart",
+    "tournaments_of_account",
     "tournaments_of_group",
     "tournaments_of_player",
 ]

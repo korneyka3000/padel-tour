@@ -266,6 +266,12 @@ class TournamentSummary(View):
     #: Which group it belongs to. The caller asked about a group, so telling them again is
     #: noise; the bot uses it to route a button.
     group_id: uuid.UUID = Field(exclude=True)
+    #: The group's name, filled in only where a list spans more than one — "my tournaments"
+    #: is otherwise a column of formats and dates with no way to tell them apart.
+    group_name: str | None = None
+    #: Where the person asking finished. ``None`` when nobody is asking in particular, or
+    #: when they were not in this one.
+    my_rank: int | None = None
     finished_at: datetime | None = Field(default=None, exclude=True)
     #: Everyone who played, best first.
     #:

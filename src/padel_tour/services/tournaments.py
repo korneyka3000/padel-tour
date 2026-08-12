@@ -155,14 +155,25 @@ def _entries_for(state: TournamentState) -> list[TournamentPlayer]:
     ]
 
 
-def _to_summary(row: Tournament) -> TournamentSummary:
-    """An archive line. Naming the winner means ranking, so the engine runs here too."""
+def _to_summary(
+    row: Tournament,
+    *,
+    for_account: uuid.UUID | None = None,
+    group_name: str | None = None,
+) -> TournamentSummary:
+    """An archive line. Naming the winner means ranking, so the engine runs here too.
+
+    ``for_account`` asks the extra question a cross-group list needs — *where did I come?* —
+    and it is answered from rows already loaded, so it costs nothing but a lookup.
+    """
     state = load_state(row)
     table = standings(state)
     played = sum(1 for rnd in state.rounds if rnd.complete)
+    mine = _player_of(row, for_account) if for_account is not None else None
     return TournamentSummary(
         id=row.id,
         group_id=row.group_id,
+        group_name=group_name,
         format=Format(row.format),
         finished=state.finished,
         player_count=len(row.entries),
@@ -172,6 +183,17 @@ def _to_summary(row: Tournament) -> TournamentSummary:
         finished_at=row.finished_at,
         winner_name=_names(row)[table[0].player] if table and played else None,
         placings=tuple(_names(row)[line.player] for line in table) if played else (),
+        my_rank=next((line.rank for line in table if line.player == mine), None)
+        if played
+        else None,
+    )
+
+
+def _player_of(row: Tournament, account_id: uuid.UUID) -> str | None:
+    """Which player, in the engine's spelling, this account holds in this tournament."""
+    return next(
+        (str(entry.player_id) for entry in row.entries if entry.player.account_id == account_id),
+        None,
     )
 
 
@@ -401,6 +423,27 @@ async def list_tournaments(
     await get_group(session, group_id)
     rows = await repositories.tournaments_of_group(session, group_id, limit=limit, offset=offset)
     return [_to_summary(row) for row in rows]
+
+
+async def my_tournaments(
+    session: AsyncSession, account: Account, *, limit: int = 20, offset: int = 0
+) -> list[TournamentSummary]:
+    """Everything one person has played, newest first, across every group they play in.
+
+    A group's archive answers "what has this group played"; nothing answered "what have I
+    played", and a person in two groups had to visit both and read past everyone else.
+
+    Group names come from one extra query for the whole page rather than a relationship on
+    each row: a list that spans groups needs to say which, and loading a group per tournament
+    to print one word is the N+1 this repository layer exists to avoid.
+    """
+    rows = await repositories.tournaments_of_account(
+        session, account.id, limit=limit, offset=offset
+    )
+    names = await repositories.group_names(session, {row.group_id for row in rows})
+    return [
+        _to_summary(row, for_account=account.id, group_name=names.get(row.group_id)) for row in rows
+    ]
 
 
 async def player_history(session: AsyncSession, player_id: uuid.UUID) -> list[TournamentSummary]:

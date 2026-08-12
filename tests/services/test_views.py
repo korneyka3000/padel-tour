@@ -194,6 +194,9 @@ def test_an_archive_line_keeps_its_extras_off_the_wire() -> None:
         "total_rounds",
         "created_at",
         "winner_name",
+        # Published, and null unless the list spans groups or is about one person.
+        "group_name",
+        "my_rank",
     }
 
 

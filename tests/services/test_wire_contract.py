@@ -87,6 +87,8 @@ PUBLISHED: dict[str, set[str]] = {
         "total_rounds",
         "created_at",
         "winner_name",
+        "group_name",
+        "my_rank",
     },
     # Serialised as ``id``, not ``player_id`` — see the alias on the field.
     "PlayerStats": {

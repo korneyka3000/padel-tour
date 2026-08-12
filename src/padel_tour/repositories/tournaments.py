@@ -85,6 +85,30 @@ async def tournaments_of_player(
     )
 
 
+async def tournaments_of_account(
+    session: AsyncSession, account_id: uuid.UUID, *, limit: int, offset: int
+) -> Sequence[Tournament]:
+    """Everything this person has played, across every group they play in.
+
+    Reached through the players they have claimed, which is the only link an account has to
+    a tournament: a group's roster is names, and an account attaches to one of those names.
+    Somebody who has claimed nobody has played nothing, as far as this can tell — which is
+    correct, and is what an invitation fixes.
+    """
+    return list(
+        await session.scalars(
+            select(Tournament)
+            .join(TournamentPlayer, TournamentPlayer.tournament_id == Tournament.id)
+            .join(Player, Player.id == TournamentPlayer.player_id)
+            .where(Player.account_id == account_id)
+            .order_by(Tournament.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .options(*loaded())
+        )
+    )
+
+
 async def count_tournaments_of(session: AsyncSession, group_id: uuid.UUID) -> int:
     total = await session.scalar(
         select(func.count(Tournament.id)).where(Tournament.group_id == group_id)

@@ -134,6 +134,9 @@ export const ru = {
   // ─────────────────────────────────────────────────────────────── roster
   'roster.title': 'Состав',
   'roster.rename': 'переименовать',
+  'archive.yourPlace': 'ваше место',
+  'home.yourTournaments': 'Ваши турниры',
+  'home.noTournaments': 'Пока ничего. Турниры появятся здесь, когда вы сыграете — или когда владелец группы привяжет к вам игрока.',
   'roster.claimed': 'привязан',
   'roster.copy': 'Копировать',
   'roster.copied': 'Скопировано',
@@ -357,6 +360,9 @@ export const en: Record<Key, string> = {
 
   'roster.title': 'Roster',
   'roster.rename': 'rename',
+  'archive.yourPlace': 'your place',
+  'home.yourTournaments': 'Your tournaments',
+  'home.noTournaments': 'Nothing yet. Tournaments appear here once you play — or once a group owner attaches a player to you.',
   'roster.claimed': 'claimed',
   'roster.copy': 'Copy',
   'roster.copied': 'Copied',

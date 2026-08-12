@@ -109,6 +109,10 @@ export interface TournamentCard {
   total_rounds: number
   created_at: string
   winner_name: string | null
+  /** Which group, filled in only for lists that span more than one. */
+  group_name: string | null
+  /** Where you finished. Only on your own history, and null if it is unplayed. */
+  my_rank: number | null
 }
 
 export interface PlayerProfile {
@@ -223,6 +227,7 @@ export const api = {
   player: (id: string) => required<PlayerProfile>(`/players/${id}`),
 
   me: () => required<Me>('/auth/me'),
+  myTournaments: () => required<TournamentCard[]>('/me/tournaments'),
   askForLink: (email: string) => request<unknown>('/auth/magic-link', { email }),
   enter: (token: string) => required<Me>('/auth/enter', { token }),
   enterFromTelegram: (initData: string) =>

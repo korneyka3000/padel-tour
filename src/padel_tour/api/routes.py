@@ -27,6 +27,7 @@ from padel_tour.services import (
     groups_for_account,
     list_players,
     list_tournaments,
+    my_tournaments,
     require_member,
     viewing,
 )
@@ -34,7 +35,7 @@ from padel_tour.services.groups import get_group, get_player
 from padel_tour.services.permissions import Anonymous
 from padel_tour.services.stats import player_stats
 
-from .deps import API_PREFIX, CurrentAccount, Session
+from .deps import API_PREFIX, CurrentAccount, RequiredAccount, Session
 from .schemas import (
     Group,
     GroupDetail,
@@ -155,6 +156,25 @@ async def read_archive(
     await get_group(session, group_id)
     await require_member(session, actor, group_id)
     return await list_tournaments(session, group_id, limit=limit, offset=offset)
+
+
+@router.get("/me/tournaments")
+async def read_my_tournaments(
+    session: Session,
+    actor: RequiredAccount,
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE)] = DEFAULT_PAGE,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[TournamentCard]:
+    """Everything you have played, newest first, across every group you play in.
+
+    A group's archive answers what the *group* has played. Somebody in two groups had no way
+    to see their own history in one place, and reached it by opening each group and reading
+    past everybody else.
+
+    Signed in, always: this list is defined by who is asking, so there is no such thing as an
+    anonymous version of it.
+    """
+    return await my_tournaments(session, actor, limit=limit, offset=offset)
 
 
 @router.get(

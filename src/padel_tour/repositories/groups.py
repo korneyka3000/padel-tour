@@ -10,7 +10,7 @@ from padel_tour.db import Group, GroupLink, Player
 
 if TYPE_CHECKING:
     import uuid
-    from collections.abc import Sequence
+    from collections.abc import Collection, Sequence
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,6 +52,21 @@ async def groups_with_counts(session: AsyncSession) -> Sequence[tuple[Group, int
         .order_by(Group.name)
     )
     return [(group, int(total)) for group, total in rows.all()]
+
+
+async def group_names(
+    session: AsyncSession, group_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """Names for a set of groups, in one query.
+
+    For lists that span groups. The alternative is a relationship read per row, which is the
+    N+1 this layer exists to prevent — a page of twenty tournaments would be twenty queries
+    to print twenty words.
+    """
+    if not group_ids:
+        return {}
+    rows = await session.execute(select(Group.id, Group.name).where(Group.id.in_(group_ids)))
+    return {row.id: row.name for row in rows}
 
 
 async def group_ids_for_account(session: AsyncSession, account: Account) -> set[uuid.UUID]:

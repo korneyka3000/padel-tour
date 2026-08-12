@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 
-import { Loading } from '../components/Async'
+import { TournamentList } from '../components/Archive'
+import { Loading, useAsync } from '../components/Async'
 import { api } from '../lib/api'
 import { useT } from '../components/Locale'
 import { useSession } from '../lib/auth'
@@ -20,8 +21,46 @@ export function HomePage() {
         <p className="subtitle">{t('home.tagline')}</p>
       </header>
 
-      {loading ? <Loading /> : me ? <Groups groups={me.groups} onChange={refresh} /> : <Invitation />}
+      {loading ? (
+        <Loading />
+      ) : me ? (
+        <>
+          <Groups groups={me.groups} onChange={refresh} />
+          <MyTournaments />
+        </>
+      ) : (
+        <Invitation />
+      )}
     </>
+  )
+}
+
+/**
+ * Everything you have played, wherever you played it.
+ *
+ * A group's archive answers what the group has played. Somebody in two groups had to open
+ * both and read past everyone else to find their own record.
+ *
+ * Loaded separately from the session rather than folded into `/auth/me`, which every page
+ * calls on every load — a list that only this section reads has no business being in it.
+ */
+function MyTournaments() {
+  const t = useT()
+  const { data, loading } = useAsync(() => api.myTournaments(), [])
+
+  if (loading) return null
+
+  return (
+    <section className="section" aria-labelledby="mine-heading">
+      <div className="section-head">
+        <h2 id="mine-heading">{t('home.yourTournaments')}</h2>
+      </div>
+      {data && data.length > 0 ? (
+        <TournamentList entries={data} />
+      ) : (
+        <p className="subtitle">{t('home.noTournaments')}</p>
+      )}
+    </section>
   )
 }
 

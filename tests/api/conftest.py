@@ -89,14 +89,16 @@ async def seed_tournament(
     fmt: Format = Format.AMERICANO,
     rounds_to_play: int = 0,
     owner: Account | None = None,
+    group_name: str = "Вторничный падел",
 ) -> TournamentView:
     """A group of eight with a tournament, optionally part-played.
 
     Without an owner the group is the shape a chat or the CLI makes: open to everyone. Pass
-    one when the test is about who may see it.
+    one when the test is about who may see it. ``group_name`` matters only to the tests about
+    lists that span groups, where the name is how a line is told from its neighbour.
     """
     group = await create_group(
-        session, "Вторничный падел", owner_account_id=None if owner is None else owner.id
+        session, group_name, owner_account_id=None if owner is None else owner.id
     )
     players = [(await add_player(session, group.id, name, actor=owner)).id for name in NAMES]
 
