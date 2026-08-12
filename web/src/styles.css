@@ -513,19 +513,19 @@ a {
     background 0.18s var(--ease);
 }
 
+/*
+ * The body of `.visually-hidden` was pasted in here once and its selector fused to this
+ * one, so hovering a card set `position: absolute` and shrank it to a clipped pixel. The
+ * card vanished, the list below jumped up under the cursor, the cursor left the card, the
+ * card came back — a flicker loop that also stole clicks from its neighbour, because an
+ * absolutely positioned element sits over what follows it.
+ *
+ * It shipped with the web app and survived every visual pass, because nothing here looks
+ * wrong until a pointer touches it. The live copies of `.visually-hidden` and
+ * `:focus-visible` are near the top of this file; these were duplicates, and are gone.
+ */
 a.card:hover,
-a.card.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-:focus-visible {
+a.card:focus-visible {
   border-color: var(--edge-strong);
   background: color-mix(in oklab, var(--court) 40%, transparent);
 }
