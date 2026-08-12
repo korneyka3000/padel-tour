@@ -156,6 +156,15 @@ interface ErrorBody {
 }
 
 /** Answers null for 204 — an idle group is not an error, it is just not playing. */
+/**
+ * One request, with the verb inferred when it is not given.
+ *
+ * That inference is a trap and has sprung twice: a POST that needs no body arrives as a GET
+ * and the server answers 405. `invite` and `signOut` were both wrong this way, and three
+ * other calls pass `{}` as a body they do not have purely to force the verb. Pass `method`
+ * explicitly for anything that writes — `tests/api/test_client_contract.py` checks every
+ * call here against the routes the API actually declares.
+ */
 async function request<T>(path: string, body?: unknown, method?: Method): Promise<T | null> {
   const response = await fetch(`/api${path}`, {
     method: method ?? (body === undefined ? 'GET' : 'POST'),
@@ -216,11 +225,12 @@ export const api = {
   enter: (token: string) => required<Me>('/auth/enter', { token }),
   enterFromTelegram: (initData: string) =>
     required<Me>('/auth/telegram', { init_data: initData }),
-  signOut: () => request<unknown>('/auth/sign-out'),
+  signOut: () => request<unknown>('/auth/sign-out', undefined, 'POST'),
 
   invitation: (token: string) => required<Player>(`/invites/${token}`),
   acceptInvitation: (token: string) => required<Player>('/invites/redeem', { token }),
-  invite: (playerId: string) => required<Invitation>(`/players/${playerId}/invite`),
+  invite: (playerId: string) =>
+    required<Invitation>(`/players/${playerId}/invite`, undefined, 'POST'),
 
   createGroup: (name: string) => required<Group>('/groups', { name }),
   addPlayer: (groupId: string, name: string) =>
