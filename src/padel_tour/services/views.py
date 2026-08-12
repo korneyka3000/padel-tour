@@ -83,6 +83,21 @@ class PlayerView(View):
     name: str
     is_active: bool
 
+    #: Which account holds this player, if anybody does. Internal: an account id is not a
+    #: client's business, and knowing one is not something roster membership should buy.
+    account_id: uuid.UUID | None = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def is_claimed(self) -> bool:
+        """Whether a real person has attached themselves to this name.
+
+        The fact, without the id. A roster needs it: an unclaimed player is a name somebody
+        typed, and offering to invite a player who is already claimed is offering a button
+        whose only outcome is a refusal from the server.
+        """
+        return self.account_id is not None
+
 
 class MatchView(View):
     """A match with the four names filled in, ready to print."""

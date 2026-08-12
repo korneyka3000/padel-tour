@@ -7,6 +7,8 @@ export interface Player {
   id: string
   name: string
   is_active: boolean
+  /** Whether a real account holds this name. Unclaimed players are the normal case. */
+  is_claimed: boolean
 }
 
 export interface Group {

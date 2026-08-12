@@ -134,6 +134,11 @@ export const ru = {
   // ─────────────────────────────────────────────────────────────── roster
   'roster.title': 'Состав',
   'roster.rename': 'переименовать',
+  'roster.claimed': 'привязан',
+  'roster.copy': 'Копировать',
+  'roster.copied': 'Скопировано',
+  'roster.inviteExplain': 'Ссылка для {name}. Отправьте её — тот, кто откроет, станет этим игроком, и вся его статистика будет его.',
+  'roster.inviteTerms': 'Сработает один раз и действует 7 дней.',
   'roster.invite': 'пригласить',
   'roster.remove': 'убрать',
   'roster.cancel': 'отмена',
@@ -352,6 +357,11 @@ export const en: Record<Key, string> = {
 
   'roster.title': 'Roster',
   'roster.rename': 'rename',
+  'roster.claimed': 'claimed',
+  'roster.copy': 'Copy',
+  'roster.copied': 'Copied',
+  'roster.inviteExplain': 'A link for {name}. Send it — whoever opens it becomes this player, and the history becomes theirs.',
+  'roster.inviteTerms': 'Works once, and lasts seven days.',
   'roster.invite': 'invite',
   'roster.remove': 'remove',
   'roster.cancel': 'cancel',

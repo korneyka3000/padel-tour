@@ -1121,3 +1121,44 @@ a.card:focus-visible {
 .step-3 .step-block {
   height: clamp(1.7rem, 8vw, 2.7rem);
 }
+
+/* ─────────────────────────────────────────────────────────── invitations */
+
+/*
+ * An invitation used to be a bare input holding a URL, which said nothing about what the URL
+ * was for. The link is unchanged; the sentence around it is the fix.
+ */
+.invite {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.invite-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.invite-row .field-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.invite-what {
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+}
+
+.invite-terms {
+  font-size: 0.76rem;
+  color: var(--ink-faint);
+}
+
+/* Somebody already holds this name, so there is nothing to offer. */
+.roster-claimed {
+  font-size: 0.82rem;
+  color: var(--glass);
+}

@@ -143,7 +143,13 @@ function Entry({
           <button className="link-button" type="button" onClick={() => setEditing(true)}>
             {t('roster.rename')}
           </button>
-          <InviteLink playerId={player.id} name={player.name} />
+          {player.is_claimed ? (
+            /* Already somebody's. The server refuses a second invitation for the same
+               player, so offering one is offering a refusal. */
+            <span className="roster-claimed">{t('roster.claimed')}</span>
+          ) : (
+            <InviteLink playerId={player.id} name={player.name} />
+          )}
           <button
             className="link-button"
             type="button"
@@ -159,9 +165,21 @@ function Entry({
   )
 }
 
+/**
+ * Turning a name on the roster into a person.
+ *
+ * A player is a name the owner typed. It carries the history — seven tournaments, a rank, a
+ * points-per-match — and belongs to nobody, so none of that reaches the person it is about.
+ * An invitation is how "Аня" the row becomes Аня the account: a single-use link, tied to
+ * that one player, that the owner sends however they normally reach her.
+ *
+ * It used to appear as a bare input containing a URL, with nothing saying what the URL was
+ * or what to do with it. The link is the same; everything around it is new.
+ */
 function InviteLink({ playerId, name }: { playerId: string; name: string }) {
   const t = useT()
   const [link, setLink] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function issue() {
@@ -174,17 +192,38 @@ function InviteLink({ playerId, name }: { playerId: string; name: string }) {
     }
   }
 
+  async function copy() {
+    if (link === null) return
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopied(true)
+    } catch {
+      // Clipboard access can be refused, and on a page where the link is already visible
+      // and selectable that is not worth an error message.
+      setCopied(false)
+    }
+  }
+
   if (error) return <span className="field-error">{error}</span>
 
-  if (link) {
+  if (link !== null) {
     return (
-      <input
-        className="field-input field-copy"
-        readOnly
-        value={link}
-        aria-label={t('roster.inviteLinkFor', { name })}
-        onFocus={(event) => event.target.select()}
-      />
+      <span className="invite">
+        <span className="invite-what">{t('roster.inviteExplain', { name })}</span>
+        <span className="invite-row">
+          <input
+            className="field-input field-copy"
+            readOnly
+            value={link}
+            aria-label={t('roster.inviteLinkFor', { name })}
+            onFocus={(event) => event.target.select()}
+          />
+          <button className="button button-small" type="button" onClick={() => void copy()}>
+            {copied ? t('roster.copied') : t('roster.copy')}
+          </button>
+        </span>
+        <span className="invite-terms">{t('roster.inviteTerms')}</span>
+      </span>
     )
   }
 

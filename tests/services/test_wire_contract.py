@@ -36,7 +36,7 @@ from padel_tour.services import View
 #: What each view publishes. Serialisation shape — the one a client actually reads.
 PUBLISHED: dict[str, set[str]] = {
     "GroupView": {"id", "name", "player_count"},
-    "PlayerView": {"id", "group_id", "name", "is_active"},
+    "PlayerView": {"id", "group_id", "name", "is_active", "is_claimed"},
     "MatchView": {
         "court",
         "team_a",
