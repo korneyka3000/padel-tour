@@ -1040,3 +1040,86 @@ a.card:focus-visible {
 .langs .link-button[aria-pressed='true'] {
   color: var(--ink);
 }
+
+/* ─────────────────────────────────────────────────────────── podium */
+
+/*
+ * Silver, gold, bronze — left to right, because that is where they stand. The order comes
+ * from the component; this only has to make the middle one taller and warmer.
+ */
+.podium {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+  gap: 0.5rem;
+  /* The floor. Without it the blocks fade downwards into the page and read as bars someone
+     cut off, rather than as three steps standing on something. */
+  border-bottom: 1px solid var(--edge-strong);
+}
+
+.step {
+  display: grid;
+  justify-items: center;
+  gap: 0.15rem;
+  text-align: center;
+  min-width: 0;
+}
+
+.step-rank {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: var(--ink-faint);
+}
+
+.step-name {
+  font-weight: 600;
+  font-size: clamp(0.85rem, 3.2vw, 1.05rem);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-points {
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+}
+
+/* The block itself. Height is the whole of the ranking, so it is the only thing that
+   differs between the three. */
+.step-block {
+  width: 100%;
+  margin-top: 0.4rem;
+  border-radius: var(--radius) var(--radius) 0 0;
+  border: 1px solid var(--edge);
+  border-bottom: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--court-lit) 85%, transparent),
+    color-mix(in oklab, var(--court) 55%, transparent)
+  );
+}
+
+.step-1 .step-block {
+  height: clamp(3.5rem, 16vw, 5.5rem);
+  border-color: color-mix(in oklab, var(--sign) 55%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--sign) 52%, transparent),
+    color-mix(in oklab, var(--sign) 16%, transparent)
+  );
+}
+
+.step-1 .step-rank,
+.step-1 .step-name {
+  color: var(--sign);
+}
+
+.step-2 .step-block {
+  height: clamp(2.4rem, 11vw, 3.8rem);
+}
+
+.step-3 .step-block {
+  height: clamp(1.7rem, 8vw, 2.7rem);
+}

@@ -162,6 +162,8 @@ export const ru = {
   'court.scoreFailed': 'Не записалось',
 
   // ─────────────────────────────────────────────────────────────── figures
+  'podium.title': 'Пьедестал',
+  'podium.points': '{points} очков',
   'standings.title': 'Таблица',
   'standings.place': 'Место',
   'standings.player': 'Игрок',
@@ -376,6 +378,8 @@ export const en: Record<Key, string> = {
   'court.ok': 'OK',
   'court.scoreFailed': 'Could not save it',
 
+  'podium.title': 'Podium',
+  'podium.points': '{points} points',
   'standings.title': 'Table',
   'standings.place': 'Place',
   'standings.player': 'Player',

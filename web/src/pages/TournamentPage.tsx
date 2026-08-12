@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router'
 import { Failed, Loading, useAsync } from '../components/Async'
 import { Climb } from '../components/Climb'
 import { CourtGrid } from '../components/Court'
+import { Podium } from '../components/Podium'
 import { Standings } from '../components/Standings'
 import type { Scoring } from '../components/Court'
 import type { Tournament } from '../lib/api'
@@ -45,6 +46,23 @@ export function TournamentPage() {
           },
         }
 
+  const rounds = showing ? (
+    <CourtGrid
+      round={showing}
+      totalRounds={tournament.total_rounds}
+      scoring={scoring}
+      nav={
+        tournament.rounds.length > 1
+          ? {
+              onStep: (delta) => setLooking(at + delta),
+              canGoBack: at > 0,
+              canGoForward: at < tournament.rounds.length - 1,
+            }
+          : undefined
+      }
+    />
+  ) : null
+
   return (
     <>
       <Link className="back" to={`/g/${tournament.group_id}`}>
@@ -66,26 +84,26 @@ export function TournamentPage() {
 
       <Controls tournament={tournament} onChange={setLive} />
 
-      {showing && (
-        <CourtGrid
-          round={showing}
-          totalRounds={tournament.total_rounds}
-          scoring={scoring}
-          nav={
-            tournament.rounds.length > 1
-              ? {
-                  onStep: (delta) => setLooking(at + delta),
-                  canGoBack: at > 0,
-                  canGoForward: at < tournament.rounds.length - 1,
-                }
-              : undefined
-          }
-        />
+      {/*
+       * Two pages, and the order is the difference between them. While it is being played
+       * the only thing that matters is the court in front of you, so that comes first and
+       * the table is what you scroll to. Once it is over nobody is standing on a court —
+       * they want the result, then the table, and the rounds are the replay underneath.
+       */}
+      {tournament.finished ? (
+        <>
+          <Podium rows={tournament.standings} />
+          <Standings rows={tournament.standings} />
+          <Climb progression={tournament.progression} />
+          {rounds}
+        </>
+      ) : (
+        <>
+          {rounds}
+          <Standings rows={tournament.standings} />
+          <Climb progression={tournament.progression} />
+        </>
       )}
-
-      <Standings rows={tournament.standings} />
-
-      <Climb progression={tournament.progression} />
     </>
   )
 }
