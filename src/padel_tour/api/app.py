@@ -7,10 +7,10 @@ reach exactly the same object.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -35,6 +35,9 @@ from .telegram import router as telegram_router
 
 logger = logging.getLogger(__name__)
 
+#: What Starlette hands a middleware to get the rest of the stack's answer.
+type CallNext = Callable[[Request], Awaitable[Response]]
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -58,6 +61,30 @@ def create_app() -> FastAPI:
         # through has nothing to do. None removes it rather than parking it somewhere.
         swagger_ui_oauth2_redirect_url=None,
     )
+
+    @app.middleware("http")
+    async def _never_cache(request: Request, call_next: CallNext) -> Response:
+        """Say, on every answer, that it belongs to one person and may not be stored.
+
+        The platform's default is ``cache-control: public, max-age=0, must-revalidate`` with
+        no ``Vary``. ``public`` invites shared caches — the edge, a company proxy, anything
+        between — to keep a copy, and with no ``Vary: Cookie`` nothing in that copy records
+        *whose* answer it was. Almost every route here reads the session cookie and answers
+        differently because of it, so a cache that ignored the cookie could hand one person's
+        groups to the next caller.
+
+        ``max-age=0, must-revalidate`` makes that unlikely rather than impossible, and
+        unlikely is the wrong guarantee for "which account's data is this". ``private`` and
+        ``no-store`` say what is actually true; ``Vary: Cookie`` is belt and braces for
+        anything that stores regardless.
+
+        Nothing here is worth caching anyway: a standings table that is one round out of date
+        is worse than a slow one.
+        """
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["Vary"] = "Cookie"
+        return response
 
     # The web app is served from the same deployment, so same-origin covers production.
     # Development runs Vite on another port, which is what this is for.
