@@ -191,6 +191,13 @@ export const ru = {
   'api.empty': 'Пусто',
 
   // ─────────────────────────────────────────────────────────────── counting
+  'company.title': 'С кем и против кого',
+  'company.partners': 'В паре с',
+  'company.opponents': 'Против',
+  'count.matches.one': 'матч',
+  'count.matches.few': 'матча',
+  'count.matches.many': 'матчей',
+  'count.matches.other': 'матча',
   'count.players.one': 'игрок',
   'count.players.few': 'игрока',
   'count.players.many': 'игроков',
@@ -414,6 +421,13 @@ export const en: Record<Key, string> = {
   'api.requestFailed': 'The request failed ({status})',
   'api.empty': 'Empty',
 
+  'company.title': 'With and against',
+  'company.partners': 'Partnered',
+  'company.opponents': 'Faced',
+  'count.matches.one': 'match',
+  'count.matches.few': 'matches',
+  'count.matches.many': 'matches',
+  'count.matches.other': 'matches',
   'count.players.one': 'player',
   'count.players.few': 'players',
   'count.players.many': 'players',
@@ -468,7 +482,7 @@ export const en: Record<Key, string> = {
 export const DICTIONARIES: Record<Locale, Record<Key, string>> = { ru, en }
 
 /** Bases that get counted. Each needs the four plural categories in the dictionary. */
-export type Countable = 'players' | 'rounds' | 'courts'
+export type Countable = 'players' | 'rounds' | 'courts' | 'matches'
 
 export type Params = Record<string, string | number>
 

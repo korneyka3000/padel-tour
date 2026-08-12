@@ -62,6 +62,7 @@ PUBLISHED: dict[str, set[str]] = {
     "ProgressPointView": {"round_no", "points_for", "cumulative_points", "rank"},
     "PlayerProgress": {"player_id", "name", "points"},
     "Viewing": {"is_member", "is_organiser", "plays_as", "anyone_may_score"},
+    "Together": {"player_id", "name", "played", "won", "win_rate"},
     "TournamentView": {
         "id",
         "group_id",
@@ -102,6 +103,8 @@ PUBLISHED: dict[str, set[str]] = {
         "best_rank",
         "podiums",
         "history",
+        "partners",
+        "opponents",
     },
 }
 

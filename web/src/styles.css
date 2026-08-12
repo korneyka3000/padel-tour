@@ -1162,3 +1162,62 @@ a.card:focus-visible {
   font-size: 0.82rem;
   color: var(--glass);
 }
+
+/* ────────────────────────────────────────── with and against */
+
+/*
+ * The question the table cannot answer: who you win with, and who you never beat. Two
+ * columns because they are the two sides of the same net, and a count beside every rate
+ * because one match won together is 100%.
+ */
+.company {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--gap);
+}
+
+.company-heading {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.5rem;
+}
+
+.company-list {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.company-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--edge) 45%, transparent);
+  font-size: 0.9rem;
+}
+
+.company-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.company-count {
+  color: var(--ink-faint);
+  font-size: 0.78rem;
+}
+
+.company-rate {
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The best partner, or the hardest opponent — only where enough matches back it up. */
+.company-rate.is-standout {
+  color: var(--sign);
+  font-weight: 600;
+}

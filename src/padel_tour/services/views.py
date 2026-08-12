@@ -168,6 +168,28 @@ class PlayerProgress(View):
     points: tuple[ProgressPointView, ...]
 
 
+class Together(View):
+    """How one player has fared alongside, or across the net from, another.
+
+    The same shape answers both questions, because they are the same count from two sides:
+    matches shared, and how many of them this player won. Which side of the net it was is the
+    list it appears in, not a field.
+
+    A win rate on its own is a trap at this scale — one match won together is 100% — so the
+    count travels with it and the interface says both.
+    """
+
+    player_id: uuid.UUID
+    name: str
+    played: int
+    won: int
+
+    @computed_field
+    @property
+    def win_rate(self) -> float:
+        return round(self.won / self.played, 3) if self.played else 0.0
+
+
 class Viewing(View):
     """Where one caller stands in one tournament. All false is a stranger, and correct.
 

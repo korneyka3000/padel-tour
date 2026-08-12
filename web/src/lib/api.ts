@@ -115,6 +115,15 @@ export interface TournamentCard {
   my_rank: number | null
 }
 
+/** How one player has fared alongside, or across the net from, another. */
+export interface Together {
+  player_id: string
+  name: string
+  played: number
+  won: number
+  win_rate: number
+}
+
 export interface PlayerProfile {
   id: string
   name: string
@@ -126,6 +135,10 @@ export interface PlayerProfile {
   best_rank: number | null
   podiums: number
   history: TournamentCard[]
+  /** Everyone they have partnered, most-played first. */
+  partners: Together[]
+  /** Everyone they have played against, most-played first. */
+  opponents: Together[]
 }
 
 export interface Me {
