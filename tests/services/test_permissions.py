@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from conftest import account, claim, make_club
-from padel_tour.db import PROVIDER_TELEGRAM
+from padel_tour.db import PROVIDER_EMAIL, PROVIDER_TELEGRAM
 from padel_tour.engine import Format, TournamentConfig
 from padel_tour.services import (
     add_player,
@@ -273,6 +273,43 @@ async def test_an_admin_can_still_be_an_ordinary_player(
 
     assert await is_admin(session, account)
     assert await is_member(session, account, club.group_id)
+
+
+async def test_an_admin_arriving_by_email_is_still_an_admin(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bug this pair exists to prevent, and it is invisible from inside one door.
+
+    The two ways in mint **different accounts** — a magic link resolves by address, a bot
+    link by account — so an admin who signed in by email held no Telegram identity, was
+    refused everywhere, and had nothing on screen saying why.
+    """
+    by_email = await ensure_identity(session, PROVIDER_EMAIL, "boss@example.test")
+    monkeypatch.setenv("ADMIN_EMAILS", "boss@example.test")
+    monkeypatch.delenv("ADMIN_TELEGRAM_IDS", raising=False)
+
+    assert await is_admin(session, by_email)
+
+
+async def test_an_address_is_matched_whatever_its_case(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Addresses are stored lowercased; whoever types the setting will not know that."""
+    by_email = await ensure_identity(session, PROVIDER_EMAIL, "boss@example.test")
+    monkeypatch.setenv("ADMIN_EMAILS", "Boss@Example.TEST")
+
+    assert await is_admin(session, by_email)
+
+
+async def test_one_door_being_listed_does_not_open_the_other(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Telegram id in the address list must not match, or the lists are one list."""
+    by_email = await ensure_identity(session, PROVIDER_EMAIL, "someone@example.test")
+    monkeypatch.setenv("ADMIN_TELEGRAM_IDS", "someone@example.test")
+    monkeypatch.delenv("ADMIN_EMAILS", raising=False)
+
+    assert not await is_admin(session, by_email)
 
 
 async def test_an_admin_sees_every_group(

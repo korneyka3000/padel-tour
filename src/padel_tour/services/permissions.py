@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Final
 
 from padel_tour import repositories
-from padel_tour.db import PROVIDER_TELEGRAM
+from padel_tour.db import PROVIDER_EMAIL, PROVIDER_TELEGRAM
 from padel_tour.settings import settings
 
 from .errors import (
@@ -85,12 +85,24 @@ async def is_admin(session: AsyncSession, actor: Account) -> bool:
     Read from configuration rather than stored on the row on purpose: the list of people
     who can reach into any group belongs with the deployment, not in data that a bug — or
     somebody with a database client — could quietly change.
+
+    **Both doors, or neither.** This used to ask only about Telegram, which made the answer
+    depend on how somebody had signed in. The two doors mint different accounts — a magic
+    link resolves by address, a bot link by account — so an admin arriving by email held no
+    Telegram identity, was refused everywhere, and had nothing on screen to explain it.
     """
-    allowed = settings().admins
-    if not allowed:
-        return False
-    identities = await repositories.external_ids_of(session, actor.id, PROVIDER_TELEGRAM)
-    return any(external in allowed for external in identities)
+    current = settings()
+    for provider, allowed in (
+        (PROVIDER_TELEGRAM, current.admins),
+        (PROVIDER_EMAIL, current.admin_addresses),
+    ):
+        if not allowed:
+            continue
+        held = await repositories.external_ids_of(session, actor.id, provider)
+        # Addresses are stored lowercased; ids are digits. Lowercasing both is harmless.
+        if any(external.lower() in allowed for external in held):
+            return True
+    return False
 
 
 async def is_member(session: AsyncSession, actor: Account, group_id: uuid.UUID) -> bool:

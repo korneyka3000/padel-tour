@@ -73,6 +73,14 @@ class Settings(BaseSettings):
     #: in-app browser.
     bot_username: str = ""
 
+    #: Email addresses that may see and run everything, comma separated.
+    #:
+    #: The same capability as the list below, through the other door. Without it an admin
+    #: who signs in by email is an ordinary user and cannot tell why: the two doors mint
+    #: **different accounts** — a magic link resolves by address, a bot link by account —
+    #: and only one of them carries a Telegram identity to match against.
+    admin_emails: str = ""
+
     #: Telegram user ids that may see and run everything, comma separated.
     #:
     #: A capability, not a separate surface. An admin uses the same screens as everyone
@@ -86,9 +94,13 @@ class Settings(BaseSettings):
 
     @property
     def admins(self) -> frozenset[str]:
-        return frozenset(
-            part.strip() for part in self.admin_telegram_ids.split(",") if part.strip()
-        )
+        """Telegram ids that are allowed everywhere."""
+        return _listed(self.admin_telegram_ids)
+
+    @property
+    def admin_addresses(self) -> frozenset[str]:
+        """Email addresses that are allowed everywhere. Lowercased, as addresses are stored."""
+        return frozenset(address.lower() for address in _listed(self.admin_emails))
 
     #: Set by the platform, not by us. The fallback that makes a first deploy work before
     #: anybody has thought about ``PUBLIC_BASE_URL``.
@@ -99,6 +111,11 @@ class Settings(BaseSettings):
         """Who mail comes from. Gmail rewrites a From that is not the account, so default
         to the account rather than to something that would be silently replaced."""
         return self.mail_from or self.smtp_user
+
+
+def _listed(raw: str) -> frozenset[str]:
+    """A comma-separated environment variable, as a set. Blank means nobody."""
+    return frozenset(part.strip() for part in raw.split(",") if part.strip())
 
 
 def settings() -> Settings:
