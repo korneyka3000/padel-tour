@@ -27,6 +27,7 @@ from padel_tour.services import TableNotFoundError, list_groups
 from padel_tour.services.admin import (
     AccountView,
     Doomed,
+    Merge,
     Totals,
     all_tournaments,
     attach_player,
@@ -35,6 +36,8 @@ from padel_tour.services.admin import (
     detach_player,
     group_impact,
     list_accounts,
+    merge_accounts,
+    merge_preview,
     set_owner,
     totals,
 )
@@ -91,6 +94,10 @@ class Attachment(BaseModel):
     account_id: uuid.UUID
 
 
+class MergeInto(BaseModel):
+    into: uuid.UUID = Field(description="The account that survives and keeps everything")
+
+
 # ------------------------------------------------------------------------------- overview
 
 
@@ -126,6 +133,30 @@ async def attach(
 async def detach(player_id: uuid.UUID, session: Session, _: RequiredAdmin) -> None:
     """Let go of a player on behalf of whoever holds them. Asking twice is not an error."""
     await detach_player(session, player_id)
+
+
+@router.get("/accounts/{account_id}/merge-preview")
+async def read_merge(
+    account_id: uuid.UUID,
+    into: uuid.UUID,
+    session: Session,
+    _: RequiredAdmin,
+) -> Merge:
+    """What joining this account to another would move, and what stops it."""
+    return await merge_preview(session, account_id, into)
+
+
+@router.post("/accounts/{account_id}/merge")
+async def do_merge(
+    account_id: uuid.UUID, body: MergeInto, session: Session, _: RequiredAdmin
+) -> Merge:
+    """Join this account to another. This one is deleted; the other keeps everything.
+
+    The two doors mint different accounts — a magic link resolves by address, a bot link by
+    account — so one person arrives twice and their history splits down the middle. This is
+    how it gets put back together.
+    """
+    return await merge_accounts(session, account_id, body.into)
 
 
 # --------------------------------------------------------------------------------- groups

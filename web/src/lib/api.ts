@@ -149,6 +149,17 @@ export interface Health {
   database: string
 }
 
+/** What joining one account to another would do, or has done. */
+export interface Merge {
+  /** Rows that would move, by table. */
+  moving: Record<string, number>
+  /** Reasons it cannot happen. Empty means it can. */
+  conflicts: string[]
+  /** Ways in the surviving account would gain. */
+  gaining: Identified[]
+  possible: boolean
+}
+
 export interface Totals {
   accounts: number
   groups: number
@@ -314,6 +325,10 @@ export const api = {
       request<null>(`/admin/players/${playerId}/attach`, { account_id: accountId }, 'POST'),
     detach: (playerId: string) =>
       request<null>(`/admin/players/${playerId}/detach`, undefined, 'POST'),
+    mergePreview: (id: string, into: string) =>
+      required<Merge>(`/admin/accounts/${id}/merge-preview?into=${into}`),
+    merge: (id: string, into: string) =>
+      required<Merge>(`/admin/accounts/${id}/merge`, { into }, 'POST'),
     tables: () => required<TableName[]>('/admin/tables'),
     table: (name: string) => required<TablePage>(`/admin/tables/${name}`),
   },

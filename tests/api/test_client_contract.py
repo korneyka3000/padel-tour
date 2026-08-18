@@ -36,7 +36,13 @@ _HOLE = re.compile(r"\$\{[^}]*\}|\{[^}]*\}")
 
 
 def canonical(path: str) -> str:
-    return _HOLE.sub("{}", path)
+    """A path both sides spell the same way.
+
+    Placeholders differ — ``${playerId}`` here, ``{player_id}`` there — and the client
+    carries query strings that an OpenAPI path never does. Both are noise for the question
+    being asked, which is only whether the route exists and takes this verb.
+    """
+    return _HOLE.sub("{}", path.split("?", maxsplit=1)[0])
 
 
 def _arguments(source: str, start: int) -> list[str]:

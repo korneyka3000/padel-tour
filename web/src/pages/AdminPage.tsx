@@ -21,7 +21,7 @@ import { Link, useParams } from 'react-router'
 import { TournamentList } from '../components/Archive'
 import { Failed, Loading, useAsync } from '../components/Async'
 import { useT } from '../components/Locale'
-import type { AccountRow, Doomed, Group, TablePage } from '../lib/api'
+import type { AccountRow, Doomed, Group, Merge, TablePage } from '../lib/api'
 import { api } from '../lib/api'
 import { useSession } from '../lib/auth'
 
@@ -156,7 +156,12 @@ function People() {
       </div>
       <div className="admin-rows">
         {(data ?? []).map((row) => (
-          <Person account={row} key={row.id} onChanged={() => setReload(reload + 1)} />
+          <Person
+            account={row}
+            others={(data ?? []).filter((one) => one.id !== row.id)}
+            key={row.id}
+            onChanged={() => setReload(reload + 1)}
+          />
         ))}
       </div>
     </section>
@@ -169,7 +174,15 @@ function People() {
  * The display name is usually absent — an account only has one if some integration happened
  * to supply it — so the identity is the line that actually says who this is.
  */
-function Person({ account, onChanged }: { account: AccountRow; onChanged: () => void }) {
+function Person({
+  account,
+  others,
+  onChanged,
+}: {
+  account: AccountRow
+  others: AccountRow[]
+  onChanged: () => void
+}) {
   const t = useT()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -222,10 +235,102 @@ function Person({ account, onChanged }: { account: AccountRow; onChanged: () => 
             </span>
           ))
         )}
+        {others.length > 0 && <MergeInto account={account} others={others} onChanged={onChanged} />}
         {busy && <span className="card-meta">…</span>}
         {error && <span className="field-error">{error}</span>}
       </div>
     </div>
+  )
+}
+
+/**
+ * Joining one account to another.
+ *
+ * One person, two accounts, because the two doors mint different ones — a magic link
+ * resolves by address, a bot link by account. Somebody who used both appears twice with
+ * their history split down the middle, and nothing else in the app can put it back.
+ *
+ * This account is the one that disappears. Picking the survivor from a list rather than
+ * typing an id, and showing what moves before it moves, because the operation is not
+ * reversible and the numbers are the only thing that makes the question answerable.
+ */
+function MergeInto({
+  account,
+  others,
+  onChanged,
+}: {
+  account: AccountRow
+  others: AccountRow[]
+  onChanged: () => void
+}) {
+  const t = useT()
+  const [into, setInto] = useState('')
+  const [preview, setPreview] = useState<Merge | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function look(target: string) {
+    setInto(target)
+    setPreview(null)
+    setError(null)
+    if (!target) return
+    try {
+      setPreview(await api.admin.mergePreview(account.id, target))
+    } catch (failure) {
+      setError(t.say(failure))
+    }
+  }
+
+  async function join() {
+    if (!preview?.possible) return
+    const rows = Object.entries(preview.moving)
+      .map(([table, count]) => `${table}: ${count}`)
+      .join(', ')
+    if (!window.confirm(t('admin.confirmMerge', { rows: rows || t('admin.nothingToMove') }))) {
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      await api.admin.merge(account.id, into)
+      onChanged()
+    } catch (failure) {
+      setError(t.say(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <span className="admin-merge">
+      <select
+        className="field-input"
+        aria-label={t('admin.mergeInto')}
+        value={into}
+        onChange={(event) => void look(event.target.value)}
+      >
+        <option value="">{t('admin.mergeInto')}</option>
+        {others.map((one) => (
+          <option value={one.id} key={one.id}>
+            {one.identities.map((way) => way.external_id).join(', ') || one.id}
+          </option>
+        ))}
+      </select>
+      {preview && !preview.possible && (
+        <span className="field-error">{preview.conflicts.join('; ')}</span>
+      )}
+      {preview?.possible && (
+        <button
+          className="link-button is-danger"
+          type="button"
+          disabled={busy}
+          onClick={() => void join()}
+        >
+          {busy ? '…' : t('admin.merge')}
+        </button>
+      )}
+      {error && <span className="field-error">{error}</span>}
+    </span>
   )
 }
 

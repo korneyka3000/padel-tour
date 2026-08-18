@@ -20,13 +20,21 @@ from sqlalchemy import select
 
 from conftest import OWNER_EMAIL, seed_tournament, sign_in
 from padel_tour.api.app import create_app
-from padel_tour.db import PROVIDER_EMAIL, LoginSession
-from padel_tour.services import account_for_identity, create_group, ensure_identity
+from padel_tour.db import PROVIDER_EMAIL, PROVIDER_TELEGRAM, LoginSession
+from padel_tour.services import (
+    account_for_identity,
+    account_for_session,
+    claim_player,
+    create_group,
+    ensure_identity,
+    open_session,
+)
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from padel_tour.db import Account
     from padel_tour.services.mail import InMemoryMailer
 
 #: Every admin route, as (method, path-with-holes), read from the app rather than listed.
@@ -321,3 +329,173 @@ async def test_a_group_can_be_handed_to_nobody(
 
     assert response.status_code == 204
     assert (await client.get(f"/api/groups/{group.id}")).json()["is_owner"] is True
+
+
+# ---------------------------------------------------------------------------------- merging
+#
+# One person, two accounts. The doors mint different ones — a magic link resolves by address,
+# a bot link by account — so somebody who used both appears twice with their history split
+# down the middle. Merging is how it gets put back, and the interesting part is what it
+# refuses to do.
+
+
+async def two_of_me(session: AsyncSession) -> tuple[Account, Account]:
+    by_mail = await ensure_identity(session, PROVIDER_EMAIL, "same.person@example.com")
+    by_chat = await ensure_identity(session, PROVIDER_TELEGRAM, "424242")
+    return by_mail, by_chat
+
+
+async def test_merging_moves_everything_and_removes_the_spare(
+    client: AsyncClient,
+    session: AsyncSession,
+    mailer: InMemoryMailer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    by_mail, by_chat = await two_of_me(session)
+    view = await seed_tournament(session, owner=by_chat)
+    # Whoever the tie-break puts first in an unplayed tournament — the name is not the point,
+    # only that the same one comes out the other side.
+    mine = view.standings[0]
+    await claim_player(session, mine.player_id, by_chat)
+    await session.commit()
+    await become_admin(client, mailer, monkeypatch)
+
+    response = await client.post(
+        f"/api/admin/accounts/{by_chat.id}/merge", json={"into": str(by_mail.id)}
+    )
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["possible"] is True
+    # Everything it was: the group it owned, the tournament it organised, the player it
+    # held, and the way it signed in.
+    assert body["moving"] == {
+        "groups": 1,
+        "tournaments": 1,
+        "players": 1,
+        "identities": 1,
+    }
+    assert [one["provider"] for one in body["gaining"]] == [PROVIDER_TELEGRAM]
+
+    left = (await client.get("/api/admin/accounts")).json()
+    assert str(by_chat.id) not in [row["id"] for row in left]
+    survivor = next(row for row in left if row["id"] == str(by_mail.id))
+    assert {one["provider"] for one in survivor["identities"]} == {
+        PROVIDER_EMAIL,
+        PROVIDER_TELEGRAM,
+    }
+    assert [one["name"] for one in survivor["players"]] == [mine.name]
+
+
+async def test_the_preview_says_the_same_thing_beforehand(
+    client: AsyncClient,
+    session: AsyncSession,
+    mailer: InMemoryMailer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The confirmation and the receipt cannot be allowed to disagree."""
+    by_mail, by_chat = await two_of_me(session)
+    view = await seed_tournament(session, owner=by_chat)
+    await claim_player(session, view.standings[0].player_id, by_chat)
+    await session.commit()
+    await become_admin(client, mailer, monkeypatch)
+
+    preview = await client.get(
+        f"/api/admin/accounts/{by_chat.id}/merge-preview", params={"into": str(by_mail.id)}
+    )
+    done = await client.post(
+        f"/api/admin/accounts/{by_chat.id}/merge", json={"into": str(by_mail.id)}
+    )
+
+    assert preview.json() == done.json()
+
+
+async def test_two_email_accounts_refuse_to_merge(
+    client: AsyncClient,
+    session: AsyncSession,
+    mailer: InMemoryMailer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One account holds at most one login per provider, so this needs a decision.
+
+    Which address to keep is not something a rule can answer, and guessing would silently
+    throw one away.
+    """
+    one = await ensure_identity(session, PROVIDER_EMAIL, "first@example.com")
+    two = await ensure_identity(session, PROVIDER_EMAIL, "second@example.com")
+    await session.commit()
+    await become_admin(client, mailer, monkeypatch)
+
+    preview = await client.get(
+        f"/api/admin/accounts/{one.id}/merge-preview", params={"into": str(two.id)}
+    )
+    attempt = await client.post(f"/api/admin/accounts/{one.id}/merge", json={"into": str(two.id)})
+
+    assert preview.json()["possible"] is False
+    assert preview.json()["conflicts"] == ["both sign in by email"]
+    assert attempt.status_code == 409
+    assert len((await client.get("/api/admin/accounts")).json()) >= 2
+
+
+async def test_holding_two_players_in_one_group_refuses_to_merge(
+    client: AsyncClient,
+    session: AsyncSession,
+    mailer: InMemoryMailer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Merging would assert that two people on one roster are the same person.
+
+    Answered by detaching the wrong one, which is a decision, not a rule.
+    """
+    by_mail, by_chat = await two_of_me(session)
+    view = await seed_tournament(session, owner=by_chat)
+    await claim_player(session, view.standings[0].player_id, by_chat)
+    await claim_player(session, view.standings[1].player_id, by_mail)
+    await session.commit()
+    await become_admin(client, mailer, monkeypatch)
+
+    preview = await client.get(
+        f"/api/admin/accounts/{by_chat.id}/merge-preview", params={"into": str(by_mail.id)}
+    )
+
+    assert preview.json()["possible"] is False
+    assert preview.json()["conflicts"] == ["both hold a player in Вторничный падел"]
+
+
+async def test_an_account_cannot_be_merged_into_itself(
+    client: AsyncClient,
+    session: AsyncSession,
+    mailer: InMemoryMailer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """It would delete the survivor. Refused before anything is counted."""
+    by_mail, _ = await two_of_me(session)
+    await session.commit()
+    await become_admin(client, mailer, monkeypatch)
+
+    attempt = await client.post(
+        f"/api/admin/accounts/{by_mail.id}/merge", json={"into": str(by_mail.id)}
+    )
+
+    assert attempt.status_code == 403
+
+
+async def test_the_merged_account_is_signed_out_rather_than_carried_over(
+    client: AsyncClient,
+    session: AsyncSession,
+    mailer: InMemoryMailer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A live session names a way in, and moving one is handing over a door.
+
+    The person signs in again — through either identity, both of which now reach the same
+    account, which is the entire point of having merged them.
+    """
+    by_mail, by_chat = await two_of_me(session)
+    token = await open_session(session, by_chat)
+    await session.commit()
+    await become_admin(client, mailer, monkeypatch)
+
+    await client.post(f"/api/admin/accounts/{by_chat.id}/merge", json={"into": str(by_mail.id)})
+
+    assert await account_for_session(session, token) is None

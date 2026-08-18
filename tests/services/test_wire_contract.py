@@ -79,6 +79,7 @@ PUBLISHED: dict[str, set[str]] = {
     },
     "Totals": {"accounts", "groups", "players", "tournaments"},
     "Doomed": {"name", "players", "tournaments"},
+    "Merge": {"moving", "conflicts", "gaining", "possible"},
     "Together": {"player_id", "name", "played", "won", "win_rate"},
     "TournamentView": {
         "id",

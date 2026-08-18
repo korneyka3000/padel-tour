@@ -22,10 +22,13 @@ import uuid  # noqa: TC003 - Pydantic resolves annotations when the class is bui
 from datetime import datetime  # noqa: TC003
 from typing import TYPE_CHECKING
 
+from pydantic import Field, computed_field
+
 from padel_tour import repositories
 from padel_tour.db import PROVIDER_EMAIL, PROVIDER_TELEGRAM
 
 from .errors import (
+    ConflictError,
     ForbiddenError,
     GroupNotFoundError,
     PlayerNotFoundError,
@@ -241,3 +244,90 @@ async def all_tournaments(
     rows = await repositories.all_tournaments(session, limit=limit, offset=offset)
     names = await repositories.group_names(session, {row.group_id for row in rows})
     return [_to_summary(row, group_name=names.get(row.group_id)) for row in rows]
+
+
+class Merge(View):
+    """What joining one account to another would do, or has done.
+
+    The same shape before and after, so the confirmation and the receipt cannot disagree
+    about what happened.
+    """
+
+    #: Rows that would move, by table. Absent tables have nothing to move.
+    moving: dict[str, int] = Field(default_factory=dict)
+    #: Reasons this cannot happen. Empty means it can.
+    conflicts: tuple[str, ...] = ()
+    #: Ways in the surviving account would gain.
+    gaining: tuple[Identified, ...] = ()
+
+    @computed_field
+    @property
+    def possible(self) -> bool:
+        return not self.conflicts
+
+
+async def merge_preview(session: AsyncSession, source_id: uuid.UUID, target_id: uuid.UUID) -> Merge:
+    """What joining ``source`` to ``target`` would move, and what stops it.
+
+    Two things stop it, and both are database rules rather than caution. An account may hold
+    at most one login per provider, so two accounts that both sign in by email cannot become
+    one without somebody deciding which address to keep. And one person is one player per
+    group, so if both sides hold somebody in the same group, merging them would be asserting
+    that two people on one roster are the same person.
+
+    Neither is resolvable by a rule. Both mean somebody claimed the wrong player, or has two
+    real addresses — answered by detaching or by choosing.
+    """
+    if source_id == target_id:
+        raise ForbiddenError("an account cannot be merged into itself")
+    for account_id in (source_id, target_id):
+        if await repositories.account_by_id(session, account_id) is None:
+            raise ForbiddenError("no such account")
+
+    conflicts: list[str] = []
+    mine = await repositories.identity_providers_of(session, source_id)
+    theirs = await repositories.identity_providers_of(session, target_id)
+    conflicts.extend(f"both sign in by {provider}" for provider in sorted(mine & theirs))
+
+    my_groups = await repositories.player_groups_of(session, source_id)
+    their_groups = await repositories.player_groups_of(session, target_id)
+    shared = my_groups & their_groups
+    names = await repositories.group_names(session, shared)
+    conflicts.extend(
+        f"both hold a player in {names.get(group_id, group_id)}"
+        for group_id in sorted(shared, key=str)
+    )
+
+    identities = await repositories.identities_of(session, [source_id])
+    return Merge(
+        moving=await repositories.count_account_rows(session, source_id),
+        conflicts=tuple(conflicts),
+        gaining=tuple(
+            Identified(provider=provider, external_id=external)
+            for provider, external in identities.get(source_id, ())
+        ),
+    )
+
+
+async def merge_accounts(
+    session: AsyncSession, source_id: uuid.UUID, target_id: uuid.UUID
+) -> Merge:
+    """Join one account to another and delete the one that was joined.
+
+    Sessions and pending sign-in links on the source are ended rather than carried over: both
+    name a way in, and moving one across to a different identity is not a merge — it is
+    handing somebody a door they did not open. They sign in again, through either identity,
+    both of which now reach the same account.
+    """
+    preview = await merge_preview(session, source_id, target_id)
+    if not preview.possible:
+        raise ConflictError("; ".join(preview.conflicts))
+
+    source = await repositories.account_by_id(session, source_id)
+    if source is None:  # pragma: no cover - checked in the preview
+        raise ForbiddenError("no such account")
+
+    await repositories.move_account_rows(session, source_id, target_id)
+    await repositories.drop_account(session, source)
+    logger.warning("admin merged account %s into %s: %s", source_id, target_id, preview.moving)
+    return preview

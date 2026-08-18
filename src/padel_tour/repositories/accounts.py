@@ -4,9 +4,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 
-from padel_tour.db import Account, Identity, LoginSession, MagicLink, Player
+from padel_tour.db import (
+    Account,
+    Base,
+    Group,
+    Identity,
+    Invite,
+    LoginSession,
+    MagicLink,
+    Player,
+    Tournament,
+)
 
 if TYPE_CHECKING:
     import uuid
@@ -188,3 +198,82 @@ async def players_of_accounts(
     for account_id, player_id, name in rows:
         found.setdefault(account_id, []).append((player_id, name))
     return found
+
+
+async def identity_providers_of(session: AsyncSession, account_id: uuid.UUID) -> set[str]:
+    """Which providers this account already signs in with.
+
+    For merges: one account may hold at most one login per provider, so two accounts that
+    both sign in by email cannot become one without a decision nobody has made.
+    """
+    return set(
+        await session.scalars(select(Identity.provider).where(Identity.account_id == account_id))
+    )
+
+
+async def player_groups_of(session: AsyncSession, account_id: uuid.UUID) -> set[uuid.UUID]:
+    """The groups this account holds a player in.
+
+    Also for merges: one person is one player per group, so if both sides hold somebody in
+    the same group, merging them would claim two people are the same player.
+    """
+    return set(
+        await session.scalars(select(Player.group_id).where(Player.account_id == account_id))
+    )
+
+
+#: Every column that points at an account, and what a merge does with it.
+#:
+#: Written out rather than discovered, because a merge that silently missed one would leave
+#: rows pointing at an account that no longer exists — or, worse, quietly drop somebody's
+#: history. The list is checked against the metadata by a test.
+MOVED: tuple[tuple[type[Base], str], ...] = (
+    (Identity, "account_id"),
+    (Invite, "created_by_account_id"),
+    (Group, "owner_account_id"),
+    (Player, "account_id"),
+    (Tournament, "organiser_account_id"),
+)
+
+#: Rows that are ended rather than moved: a live session and a pending sign-in link both
+#: name a way in, and carrying one across to a different identity is not a merge.
+DISCARDED: tuple[tuple[type[Base], str], ...] = (
+    (LoginSession, "account_id"),
+    (MagicLink, "account_id"),
+)
+
+
+async def count_account_rows(session: AsyncSession, account_id: uuid.UUID) -> dict[str, int]:
+    """How much belongs to this account, per table.
+
+    Counted before anything moves, because the same numbers are what the confirmation puts
+    in front of a person: "this takes eleven tournaments with it" is a different question
+    from "are you sure?".
+    """
+    counted: dict[str, int] = {}
+    for model, column in MOVED:
+        total = await session.scalar(
+            select(func.count()).select_from(model).where(getattr(model, column) == account_id)
+        )
+        if total:
+            counted[model.__tablename__] = int(total)
+    return counted
+
+
+async def move_account_rows(
+    session: AsyncSession, source_id: uuid.UUID, target_id: uuid.UUID
+) -> None:
+    """Repoint everything that belongs to one account at another, and end the rest."""
+    for model, column in MOVED:
+        await session.execute(
+            update(model).where(getattr(model, column) == source_id).values(**{column: target_id})
+        )
+    for model, column in DISCARDED:
+        await session.execute(delete(model).where(getattr(model, column) == source_id))
+    await session.flush()
+
+
+async def drop_account(session: AsyncSession, account: Account) -> None:
+    """Delete an account that nothing points at any more."""
+    await session.delete(account)
+    await session.flush()

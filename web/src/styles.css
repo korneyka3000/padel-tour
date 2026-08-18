@@ -1353,3 +1353,17 @@ a.card:focus-visible {
   padding: 0.4rem 0.6rem;
   text-align: left;
 }
+
+/* Joining two accounts that are one person. Kept narrow so it does not dominate a row. */
+.admin-merge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.admin-merge .field-input {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.78rem;
+  max-width: 14rem;
+}
