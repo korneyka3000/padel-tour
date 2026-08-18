@@ -22,9 +22,18 @@ export function TopBar() {
         Padel<span>Tour</span>
       </Link>
       {loading ? null : me ? (
-        <button className="link-button" type="button" onClick={() => void signOut()}>
-          {t('nav.signOut')}
-        </button>
+        <>
+          {/* Only for the people it will let in. An entry that leads to a wall of
+              refusals is worse than no entry. */}
+          {me.is_admin && (
+            <Link className="link-button" to="/admin">
+              {t('nav.admin')}
+            </Link>
+          )}
+          <button className="link-button" type="button" onClick={() => void signOut()}>
+            {t('nav.signOut')}
+          </button>
+        </>
       ) : (
         <Link
           className="link-button"

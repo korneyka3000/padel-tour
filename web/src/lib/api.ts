@@ -124,6 +124,60 @@ export interface Together {
   win_rate: number
 }
 
+/** One way somebody signs in: which provider, and who they are there. */
+export interface Identified {
+  provider: string
+  external_id: string
+}
+
+/** An account, as the admin people screen needs it. */
+export interface AccountRow {
+  id: string
+  display_name: string | null
+  created_at: string
+  identities: Identified[]
+  /** The players this account holds. Ids as well as names, so one can be let go. */
+  players: { id: string; name: string }[]
+  /** Last use of a live session; absent once they have signed out everywhere. */
+  last_seen: string | null
+  is_admin: boolean
+}
+
+/** What `/health` answers: reachable, and whether the schema matches the code. */
+export interface Health {
+  status: string
+  database: string
+}
+
+export interface Totals {
+  accounts: number
+  groups: number
+  players: number
+  tournaments: number
+}
+
+/** What deleting something would take with it. Asked before, never after. */
+export interface Doomed {
+  name: string
+  players: number
+  tournaments: number
+}
+
+export interface TableName {
+  name: string
+  rows: number
+}
+
+/** One page of one table, as text — see the note on the endpoint. */
+export interface TablePage {
+  name: string
+  columns: string[]
+  rows: Record<string, string | null>[]
+  total: number
+  /** Columns withheld from every row, so their absence is not a mystery. */
+  redacted: string[]
+}
+
 export interface PlayerProfile {
   id: string
   name: string
@@ -145,6 +199,8 @@ export interface Me {
   id: string
   display_name: string | null
   groups: Group[]
+  /** Whether this account may open the admin section. The fact, not the list. */
+  is_admin: boolean
 }
 
 export interface Invitation {
@@ -241,6 +297,26 @@ export const api = {
 
   me: () => required<Me>('/auth/me'),
   myTournaments: () => required<TournamentCard[]>('/me/tournaments'),
+
+  health: () => required<Health>('/health'),
+
+  admin: {
+    totals: () => required<Totals>('/admin/totals'),
+    accounts: () => required<AccountRow[]>('/admin/accounts'),
+    groups: () => required<Group[]>('/admin/groups'),
+    tournaments: () => required<TournamentCard[]>('/admin/tournaments'),
+    impact: (groupId: string) => required<Doomed>(`/admin/groups/${groupId}/impact`),
+    deleteGroup: (groupId: string) => required<Doomed>(`/admin/groups/${groupId}`, undefined, 'DELETE'),
+    setOwner: (groupId: string, accountId: string | null) =>
+      request<null>(`/admin/groups/${groupId}/owner`, { account_id: accountId }, 'PUT'),
+    deleteTournament: (id: string) => request<null>(`/admin/tournaments/${id}`, undefined, 'DELETE'),
+    attach: (playerId: string, accountId: string) =>
+      request<null>(`/admin/players/${playerId}/attach`, { account_id: accountId }, 'POST'),
+    detach: (playerId: string) =>
+      request<null>(`/admin/players/${playerId}/detach`, undefined, 'POST'),
+    tables: () => required<TableName[]>('/admin/tables'),
+    table: (name: string) => required<TablePage>(`/admin/tables/${name}`),
+  },
   askForLink: (email: string) => request<unknown>('/auth/magic-link', { email }),
   enter: (token: string) => required<Me>('/auth/enter', { token }),
   enterFromTelegram: (initData: string) =>

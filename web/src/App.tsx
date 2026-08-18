@@ -11,6 +11,7 @@ import { launchDestination, webApp } from './lib/telegram'
 import { DrawPage } from './pages/DrawPage'
 import { EnterPage } from './pages/EnterPage'
 import { GroupPage } from './pages/GroupPage'
+import { AdminPage } from './pages/AdminPage'
 import { HomePage } from './pages/HomePage'
 import { InvitePage } from './pages/InvitePage'
 import { PlayerPage } from './pages/PlayerPage'
@@ -36,6 +37,8 @@ export function App() {
               <Route path="/g/:id/play" element={<DrawPage />} />
               <Route path="/t/:id" element={<TournamentPage />} />
               <Route path="/p/:id" element={<PlayerPage />} />
+              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/admin/:section" element={<AdminPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>

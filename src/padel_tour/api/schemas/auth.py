@@ -33,3 +33,8 @@ class Me(BaseModel):
     id: uuid.UUID
     display_name: str | None
     groups: list[Group]
+    #: Whether this account is listed as an administrator, by either door.
+    #:
+    #: The fact, not the list. A screen needs it to decide whether to offer the admin
+    #: section at all — an entry that leads to a wall of refusals is worse than no entry.
+    is_admin: bool = False

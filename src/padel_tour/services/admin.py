@@ -48,6 +48,13 @@ class Identified(View):
     external_id: str
 
 
+class Held(View):
+    """A player this account holds: enough to name them, and enough to let them go."""
+
+    id: uuid.UUID
+    name: str
+
+
 class AccountView(View):
     """An account as an administrator needs to see it.
 
@@ -59,8 +66,9 @@ class AccountView(View):
     display_name: str | None
     created_at: datetime
     identities: tuple[Identified, ...] = ()
-    #: Rosters this account is attached to, by the players it holds.
-    players: tuple[str, ...] = ()
+    #: The players this account holds. Ids as well as names, because the screen that lists
+    #: these is also the one that detaches them, and a name is not something to act on.
+    players: tuple[Held, ...] = ()
     #: Last time a live session was used. Absent once they sign out everywhere — the honest
     #: answer, since signing out is what deletes the evidence.
     last_seen: datetime | None = None
@@ -122,7 +130,9 @@ async def list_accounts(
                 Identified(provider=provider, external_id=external)
                 for provider, external in identities.get(row.id, ())
             ),
-            players=tuple(held.get(row.id, ())),
+            players=tuple(
+                Held(id=player_id, name=name) for player_id, name in held.get(row.id, ())
+            ),
             last_seen=seen.get(row.id),
             is_admin=await is_admin(session, row),
         )

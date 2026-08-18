@@ -170,20 +170,21 @@ async def count_accounts(session: AsyncSession) -> int:
 
 async def players_of_accounts(
     session: AsyncSession, account_ids: Collection[uuid.UUID]
-) -> dict[uuid.UUID, list[str]]:
-    """The players each account holds, by name, in one query.
+) -> dict[uuid.UUID, list[tuple[uuid.UUID, str]]]:
+    """The players each account holds, in one query.
 
-    Names rather than ids because the only caller is a screen listing people, and an admin
-    scanning for "who is Аня here" cannot do it from a column of UUIDs.
+    Both the id and the name: the screen that lists these is also the one that detaches
+    them, and an admin scanning for "who is Аня here" cannot do it from a column of UUIDs
+    while a detach cannot be done from a name.
     """
     if not account_ids:
         return {}
     rows = await session.execute(
-        select(Player.account_id, Player.name)
+        select(Player.account_id, Player.id, Player.name)
         .where(Player.account_id.in_(account_ids))
         .order_by(Player.name)
     )
-    found: dict[uuid.UUID, list[str]] = {}
-    for account_id, name in rows:
-        found.setdefault(account_id, []).append(name)
+    found: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = {}
+    for account_id, player_id, name in rows:
+        found.setdefault(account_id, []).append((player_id, name))
     return found

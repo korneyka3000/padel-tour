@@ -24,6 +24,7 @@ from padel_tour.services import (
     account_for_launch,
     close_session,
     groups_for_account,
+    is_admin,
     open_session,
     redeem_magic_link,
     request_magic_link,
@@ -161,6 +162,7 @@ async def _me(session: Session, account: Account) -> Me:
         id=str(account.id),
         display_name=account.display_name,
         groups=await groups_for_account(session, account),
+        is_admin=await is_admin(session, account),
     )
 
 

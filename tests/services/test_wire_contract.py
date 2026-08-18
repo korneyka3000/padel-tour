@@ -67,6 +67,7 @@ PUBLISHED: dict[str, set[str]] = {
     # are for — but they still go through the list, because "an admin may see it" is a
     # decision and not a default.
     "Identified": {"provider", "external_id"},
+    "Held": {"id", "name"},
     "AccountView": {
         "id",
         "display_name",

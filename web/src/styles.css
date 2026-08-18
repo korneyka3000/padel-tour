@@ -1221,3 +1221,135 @@ a.card:focus-visible {
   color: var(--sign);
   font-weight: 600;
 }
+
+/* ─────────────────────────────────────────────────────────── administration */
+
+/*
+ * Deliberately plainer than the rest of the app. These screens are read, not enjoyed, and
+ * the one thing they must never do is make a destructive control look inviting.
+ */
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: var(--gap);
+}
+
+.admin-tab {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+}
+
+.admin-tab:hover,
+.admin-tab:focus-visible {
+  border-color: var(--edge-strong);
+  color: var(--ink);
+}
+
+.admin-tab.is-on {
+  border-color: var(--glass);
+  color: var(--night);
+  background: var(--glass);
+}
+
+.admin-rows {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.admin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--edge) 45%, transparent);
+}
+
+.admin-row-main {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.admin-row-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.admin-row-side {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.admin-badge {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: var(--radius);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--night);
+  background: var(--sign);
+}
+
+.admin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  font-size: 0.82rem;
+}
+
+.admin-chip.is-button {
+  cursor: pointer;
+  color: inherit;
+  background: none;
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.admin-chip.is-on {
+  border-color: var(--glass);
+  color: var(--glass);
+}
+
+/* The only irreversible controls in the app. They should read as a warning, not a verb. */
+.link-button.is-danger {
+  color: color-mix(in oklab, #ff8a7a 80%, var(--ink));
+}
+
+.admin-tables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: var(--gap);
+}
+
+/* Twelve columns of UUIDs are wider than any phone, and a page that scrolls sideways as a
+   whole is a page nobody can read. */
+.admin-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+}
+
+.admin-table {
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
