@@ -38,6 +38,7 @@ from padel_tour.services.admin import (
     list_accounts,
     merge_accounts,
     merge_preview,
+    rename_account,
     set_owner,
     totals,
 )
@@ -94,6 +95,10 @@ class Attachment(BaseModel):
     account_id: uuid.UUID
 
 
+class Renaming(BaseModel):
+    display_name: str | None = Field(default=None, max_length=80)
+
+
 class MergeInto(BaseModel):
     into: uuid.UUID = Field(description="The account that survives and keeps everything")
 
@@ -133,6 +138,12 @@ async def attach(
 async def detach(player_id: uuid.UUID, session: Session, _: RequiredAdmin) -> None:
     """Let go of a player on behalf of whoever holds them. Asking twice is not an error."""
     await detach_player(session, player_id)
+
+
+@router.patch("/accounts/{account_id}", status_code=204)
+async def rename(account_id: uuid.UUID, body: Renaming, session: Session, _: RequiredAdmin) -> None:
+    """Say what an account is called. Blank clears it — a wrong name is worse than none."""
+    await rename_account(session, account_id, body.display_name)
 
 
 @router.get("/accounts/{account_id}/merge-preview")

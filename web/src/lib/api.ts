@@ -325,6 +325,8 @@ export const api = {
       request<null>(`/admin/players/${playerId}/attach`, { account_id: accountId }, 'POST'),
     detach: (playerId: string) =>
       request<null>(`/admin/players/${playerId}/detach`, undefined, 'POST'),
+    rename: (id: string, displayName: string | null) =>
+      request<null>(`/admin/accounts/${id}`, { display_name: displayName }, 'PATCH'),
     mergePreview: (id: string, into: string) =>
       required<Merge>(`/admin/accounts/${id}/merge-preview?into=${into}`),
     merge: (id: string, into: string) =>

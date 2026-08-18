@@ -499,3 +499,55 @@ async def test_the_merged_account_is_signed_out_rather_than_carried_over(
     await client.post(f"/api/admin/accounts/{by_chat.id}/merge", json={"into": str(by_mail.id)})
 
     assert await account_for_session(session, token) is None
+
+
+# ------------------------------------------------------------------------------- the name
+#
+# What an account is called. It was in the schema, shown in the panel, and impossible to
+# set: only the Mini App ever passed one, and nothing filled it in afterwards, so a list of
+# accounts was a list of Telegram ids.
+
+
+async def test_an_account_can_be_given_a_name(
+    client: AsyncClient,
+    session: AsyncSession,
+    mailer: InMemoryMailer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The only way an email account ever gets one — an address is not a name."""
+    nameless = await ensure_identity(session, PROVIDER_EMAIL, "who@example.com")
+    await session.commit()
+    await become_admin(client, mailer, monkeypatch)
+
+    response = await client.patch(
+        f"/api/admin/accounts/{nameless.id}", json={"display_name": "Корней"}
+    )
+
+    assert response.status_code == 204
+    named = next(
+        row
+        for row in (await client.get("/api/admin/accounts")).json()
+        if row["id"] == str(nameless.id)
+    )
+    assert named["display_name"] == "Корней"
+
+
+async def test_a_name_can_be_taken_away(
+    client: AsyncClient,
+    session: AsyncSession,
+    mailer: InMemoryMailer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A wrong name is worse than none, so refusing to remove one would make a typo stick."""
+    named = await ensure_identity(session, PROVIDER_EMAIL, "oops@example.com", display_name="Хто")
+    await session.commit()
+    await become_admin(client, mailer, monkeypatch)
+
+    await client.patch(f"/api/admin/accounts/{named.id}", json={"display_name": "   "})
+
+    row = next(
+        one
+        for one in (await client.get("/api/admin/accounts")).json()
+        if one["id"] == str(named.id)
+    )
+    assert row["display_name"] is None

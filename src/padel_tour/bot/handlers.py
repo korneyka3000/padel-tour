@@ -112,13 +112,23 @@ async def _group_for(session: AsyncSession, chat_id: int, title: str) -> uuid.UU
     return created.id
 
 
-async def _account_for(session: AsyncSession, user_id: int) -> Account:
+async def _account_for(
+    session: AsyncSession, user_id: int, *, display_name: str | None = None
+) -> Account:
     """The account behind a Telegram user, minted on first sight.
 
     A bot already knows who is pressing, so an unfamiliar id is a first visit rather than
     an error — which is why the bot needs no sign-in flow of its own.
+
+    It also knows their name, and used to throw it away: only the Mini App ever passed one,
+    so an account made by pressing /start stayed nameless however often its owner came back,
+    and an admin reading a list of them had nothing but Telegram ids to tell people apart.
+    Optional rather than required, because the callers that have a user pass it and the ones
+    that only have an id are not lying about the name — they simply do not know it.
     """
-    return await ensure_identity(session, PROVIDER_TELEGRAM, str(user_id))
+    return await ensure_identity(
+        session, PROVIDER_TELEGRAM, str(user_id), display_name=display_name
+    )
 
 
 async def _actor(session: AsyncSession, message: Message) -> Account:
@@ -129,7 +139,9 @@ async def _actor(session: AsyncSession, message: Message) -> Account:
     """
     if message.from_user is None:
         raise UnidentifiedCallerError("no sender on this message — write under your own name")
-    return await _account_for(session, message.from_user.id)
+    return await _account_for(
+        session, message.from_user.id, display_name=message.from_user.full_name
+    )
 
 
 async def _group_name(session: AsyncSession, group_id: uuid.UUID) -> str:
@@ -326,7 +338,7 @@ async def on_press(query: CallbackQuery, session: AsyncSession, bot: Bot) -> Non
 
     chat_id = query.message.chat.id
     message_id = query.message.message_id
-    actor = await _account_for(session, query.from_user.id)
+    actor = await _account_for(session, query.from_user.id, display_name=query.from_user.full_name)
     group_id = await _group_for(session, chat_id, query.message.chat.title or "")
 
     if parsed.action is Action.SHOW and parsed.arg == Screen.CHART:

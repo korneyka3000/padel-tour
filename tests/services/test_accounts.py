@@ -314,3 +314,48 @@ async def test_identities_of_different_providers_are_different_people_until_link
     by_mail = await ensure_identity(session, PROVIDER_EMAIL, EMAIL)
     by_telegram = await ensure_identity(session, PROVIDER_TELEGRAM, "42")
     assert by_mail.id != by_telegram.id
+
+
+# ------------------------------------------------------------------------------ the name
+#
+# `display_name` is what an account is called. It exists so that a list of accounts is a
+# list of people rather than a column of Telegram ids — which is exactly what it was, because
+# only one of the three ways in ever passed a name, and nothing filled it in afterwards.
+
+
+async def test_a_name_is_kept_when_an_account_is_minted(session: AsyncSession) -> None:
+    account = await ensure_identity(session, PROVIDER_TELEGRAM, "1", display_name="Аня")
+
+    assert account.display_name == "Аня"
+
+
+async def test_a_blank_name_is_filled_in_on_a_later_visit(session: AsyncSession) -> None:
+    """The fix for every account that already exists.
+
+    A name is only offered at the moment somebody arrives, and by then they have arrived
+    before. Without this, an account minted before its integration bothered to pass one
+    stays nameless for ever, however many times its owner comes back.
+    """
+    await ensure_identity(session, PROVIDER_TELEGRAM, "2")
+
+    later = await ensure_identity(session, PROVIDER_TELEGRAM, "2", display_name="Боря")
+
+    assert later.display_name == "Боря"
+
+
+async def test_a_name_already_there_is_never_overwritten(session: AsyncSession) -> None:
+    """Filling a blank is help; replacing a name is deciding what somebody is called."""
+    await ensure_identity(session, PROVIDER_TELEGRAM, "3", display_name="Вика")
+
+    later = await ensure_identity(session, PROVIDER_TELEGRAM, "3", display_name="Виктория")
+
+    assert later.display_name == "Вика"
+
+
+async def test_arriving_with_no_name_leaves_one_alone(session: AsyncSession) -> None:
+    """Signing in by email says nothing about what to call somebody, and must not erase it."""
+    await ensure_identity(session, PROVIDER_TELEGRAM, "4", display_name="Гриша")
+
+    later = await ensure_identity(session, PROVIDER_TELEGRAM, "4")
+
+    assert later.display_name == "Гриша"

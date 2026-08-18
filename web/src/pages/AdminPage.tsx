@@ -205,7 +205,7 @@ function Person({
     <div className="admin-row">
       <div className="admin-row-main">
         <span className="admin-row-title">
-          {account.display_name ?? t('admin.noName')}
+          <Naming account={account} onChanged={onChanged} />
           {account.is_admin && <span className="admin-badge">{t('admin.badge')}</span>}
         </span>
         <span className="card-meta">
@@ -331,6 +331,56 @@ function MergeInto({
       )}
       {error && <span className="field-error">{error}</span>}
     </span>
+  )
+}
+
+/**
+ * What an account is called.
+ *
+ * Most get a name for free — the integrations that know one pass it, and a blank is filled
+ * the next time its owner turns up. Email accounts never do: an address is not a name. This
+ * is the only way to give one of those a name, and the only way to fix a wrong one.
+ */
+function Naming({ account, onChanged }: { account: AccountRow; onChanged: () => void }) {
+  const t = useT()
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(account.display_name ?? '')
+  const [busy, setBusy] = useState(false)
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    try {
+      await api.admin.rename(account.id, name.trim() || null)
+      setEditing(false)
+      onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button className="link-button" type="button" onClick={() => setEditing(true)}>
+        {account.display_name ?? t('admin.noName')}
+      </button>
+    )
+  }
+
+  return (
+    <form className="form-inline" onSubmit={save}>
+      <input
+        className="field-input"
+        type="text"
+        maxLength={80}
+        value={name}
+        aria-label={t('admin.nameLabel')}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <button className="button button-small" type="submit" disabled={busy}>
+        {busy ? '…' : t('admin.save')}
+      </button>
+    </form>
   )
 }
 

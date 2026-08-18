@@ -76,6 +76,12 @@ async def ensure_identity(
     """
     existing = await account_for_identity(session, provider, external_id)
     if existing is not None:
+        # Fill a blank, never overwrite. Most accounts were minted before their integration
+        # bothered to pass a name, and would otherwise stay nameless forever — the name is
+        # only ever offered at the moment somebody arrives, and they have already arrived.
+        if display_name and not existing.display_name:
+            existing.display_name = display_name
+            await session.flush()
         return existing
 
     account = await repositories.save(session, Account(display_name=display_name))

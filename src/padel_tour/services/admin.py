@@ -172,6 +172,26 @@ async def detach_player(session: AsyncSession, player_id: uuid.UUID) -> None:
     logger.warning("admin detached player %s from account %s", player_id, holder.id)
 
 
+async def rename_account(
+    session: AsyncSession, account_id: uuid.UUID, display_name: str | None
+) -> None:
+    """Say what an account is called, or stop saying.
+
+    Most accounts get a name for free: the integrations that know one pass it, and a blank
+    is filled the next time its owner turns up. Email accounts never get one — an address is
+    not a name — and that is what this is for.
+
+    Blank clears it. A wrong name is worse than none, and refusing to remove one would make
+    a typo permanent.
+    """
+    account = await repositories.account_by_id(session, account_id)
+    if account is None:
+        raise ForbiddenError("no such account")
+    account.display_name = (display_name or "").strip() or None
+    await session.flush()
+    logger.warning("admin renamed account %s to %r", account_id, account.display_name)
+
+
 async def group_impact(session: AsyncSession, group_id: uuid.UUID) -> Doomed:
     """What deleting this group would destroy."""
     group = await repositories.group_by_id(session, group_id)
