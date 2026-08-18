@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import func, or_, select
 
-from padel_tour.db import Group, GroupLink, Player
+from padel_tour.db import Group, GroupLink, Player, Tournament
 
 if TYPE_CHECKING:
     import uuid
@@ -129,3 +129,31 @@ async def players_by_ids(
     session: AsyncSession, player_ids: Sequence[uuid.UUID]
 ) -> Sequence[Player]:
     return list(await session.scalars(select(Player).where(Player.id.in_(player_ids))))
+
+
+async def counts_under(session: AsyncSession, group_id: uuid.UUID) -> tuple[int, int]:
+    """How many players and tournaments a group is holding up.
+
+    For the confirmation before a delete. The foreign keys cascade, so removing a group
+    silently takes its roster and every tournament it ever played with it — a screen that
+    does not say so is asking for a yes to a question nobody was shown.
+    """
+    players = await session.scalar(select(func.count(Player.id)).where(Player.group_id == group_id))
+    tournaments = await session.scalar(
+        select(func.count(Tournament.id)).where(Tournament.group_id == group_id)
+    )
+    return int(players or 0), int(tournaments or 0)
+
+
+async def drop_group(session: AsyncSession, group: Group) -> None:
+    """Delete a group. Everything under it goes too — see :func:`counts_under`."""
+    await session.delete(group)
+    await session.flush()
+
+
+async def count_groups(session: AsyncSession) -> int:
+    return int(await session.scalar(select(func.count(Group.id))) or 0)
+
+
+async def count_players(session: AsyncSession) -> int:
+    return int(await session.scalar(select(func.count(Player.id))) or 0)

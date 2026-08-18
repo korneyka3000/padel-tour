@@ -26,6 +26,10 @@ class PlayerNotFoundError(NotFoundError):
     """No player with that id."""
 
 
+class TableNotFoundError(NotFoundError):
+    """Somebody asked the table browser for a table this schema does not have."""
+
+
 class TournamentNotFoundError(NotFoundError):
     """No tournament with that id."""
 

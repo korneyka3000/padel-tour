@@ -147,3 +147,28 @@ async def tournament_showing_chart(session: AsyncSession, group_id: uuid.UUID) -
             Tournament.group_id == group_id, Tournament.chart_message_id.is_not(None)
         )
     )
+
+
+async def all_tournaments(
+    session: AsyncSession, *, limit: int, offset: int
+) -> Sequence[Tournament]:
+    """Every tournament there is, newest first. The admin list."""
+    return list(
+        await session.scalars(
+            select(Tournament)
+            .order_by(Tournament.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .options(*loaded())
+        )
+    )
+
+
+async def drop_tournament(session: AsyncSession, row: Tournament) -> None:
+    """Delete a tournament with its rounds, matches and roster entries."""
+    await session.delete(row)
+    await session.flush()
+
+
+async def count_all_tournaments(session: AsyncSession) -> int:
+    return int(await session.scalar(select(func.count(Tournament.id))) or 0)

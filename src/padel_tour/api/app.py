@@ -25,6 +25,7 @@ from padel_tour.services import (
     TooManyRequestsError,
 )
 
+from .admin import router as admin_router
 from .auth import router as auth_router
 from .deps import API_PREFIX, dispose_engine
 from .invites import router as invites_router
@@ -139,6 +140,7 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=400, content=body(exc))
 
     app.include_router(router)
+    app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(invites_router)
     app.include_router(play_router)

@@ -55,6 +55,10 @@ PHRASES: dict[str, str] = {
     "group_not_found": "Такой группы нет",
     "player_not_found": "Такого игрока нет",
     "tournament_not_found": "Такого турнира нет",
+    # Only the admin table browser can raise this, and the bot has no admin screens.
+    # It is here because the check is "every code has words", and an exception to that
+    # rule is how the next one goes unnoticed.
+    "table_not_found": "Такой таблицы нет",
     "duplicate_group_name": "Группа с таким названием уже есть",
     "duplicate_player_name": "Такое имя в группе уже занято",
     "player_not_in_group": "Этот игрок из другой группы",

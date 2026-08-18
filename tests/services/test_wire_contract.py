@@ -30,7 +30,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-import padel_tour.api.schemas  # noqa: F401 - imported so every view class is built
+import padel_tour.api.schemas
+import padel_tour.services.admin  # noqa: F401 - and the admin views too
 from padel_tour.services import View
 
 #: What each view publishes. Serialisation shape — the one a client actually reads.
@@ -62,6 +63,21 @@ PUBLISHED: dict[str, set[str]] = {
     "ProgressPointView": {"round_no", "points_for", "cumulative_points", "rank"},
     "PlayerProgress": {"player_id", "name", "points"},
     "Viewing": {"is_member", "is_organiser", "plays_as", "anyone_may_score"},
+    # The admin panel's own views. Nothing here is secret — an administrator is who these
+    # are for — but they still go through the list, because "an admin may see it" is a
+    # decision and not a default.
+    "Identified": {"provider", "external_id"},
+    "AccountView": {
+        "id",
+        "display_name",
+        "created_at",
+        "identities",
+        "players",
+        "last_seen",
+        "is_admin",
+    },
+    "Totals": {"accounts", "groups", "players", "tournaments"},
+    "Doomed": {"name", "players", "tournaments"},
     "Together": {"player_id", "name", "played", "won", "win_rate"},
     "TournamentView": {
         "id",

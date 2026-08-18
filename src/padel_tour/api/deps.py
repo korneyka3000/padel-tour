@@ -16,8 +16,8 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from padel_tour.db import Account, create_engine, create_session_factory, database_url
-from padel_tour.services import account_for_session
-from padel_tour.services.errors import NotSignedInError
+from padel_tour.services import account_for_session, is_admin
+from padel_tour.services.errors import ForbiddenError, NotSignedInError
 from padel_tour.services.permissions import ANONYMOUS, Anonymous
 from padel_tour.settings import base_url
 
@@ -142,3 +142,21 @@ async def require_account(actor: CurrentAccount) -> Account:
 
 
 RequiredAccount = Annotated[Account, Depends(require_account)]
+
+
+async def require_admin(session: Session, actor: RequiredAccount) -> Account:
+    """The account behind this request, and it had better be listed as an administrator.
+
+    Refuses with the service layer's own error so an admin route looks like every other
+    refusal on the wire — 403 with a code, which the web already knows how to say in Russian.
+
+    Signed out is 401 rather than 403, because ``RequiredAccount`` runs first and answers
+    that question: "sign in" and "you may not" are different instructions and the client
+    routes on the difference.
+    """
+    if not await is_admin(session, actor):
+        raise ForbiddenError("administrators only")
+    return actor
+
+
+RequiredAdmin = Annotated[Account, Depends(require_admin)]
